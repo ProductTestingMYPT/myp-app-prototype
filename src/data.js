@@ -1,0 +1,380 @@
+(function () {
+  const APP = (window.SupportShiftApp = window.SupportShiftApp || {});
+
+  const TODAY = new Date();
+
+  const STATUS_META = {
+    not_started: { label: "Not started", kind: "active" },
+    in_progress: { label: "In progress", kind: "active" },
+    missing_check_in: { label: "Missing check-in", kind: "active" },
+    missing_check_out: { label: "Missing check-out", kind: "active" },
+    completed_recent: { label: "Completed <24h", kind: "completed" },
+    completed: { label: "Completed", kind: "completed" },
+    approved: { label: "Approved", kind: "completed" },
+    rejected: { label: "Rejected", kind: "completed" },
+  };
+
+  function pad(value) {
+    return String(value).padStart(2, "0");
+  }
+
+  function addDays(baseDate, days) {
+    const next = new Date(baseDate);
+    next.setHours(0, 0, 0, 0);
+    next.setDate(next.getDate() + days);
+    return next;
+  }
+
+  function formatDateKey(date) {
+    return [
+      date.getFullYear(),
+      pad(date.getMonth() + 1),
+      pad(date.getDate()),
+    ].join("-");
+  }
+
+  function isoDateTime(dateKey, time) {
+    return dateKey + "T" + time + ":00";
+  }
+
+  function participant(id, name, flags, program, isNdis, contacts, representative, emergencyContacts) {
+    return {
+      id,
+      name,
+      flags,
+      program,
+      isNdis,
+      contacts,
+      representative,
+      emergencyContacts,
+    };
+  }
+
+  const participantDirectory = {
+    p1: participant(
+      "p1",
+      "Mia Robertson",
+      ["warning: seizures", "high needs"],
+      "Supported independent living",
+      true,
+      ["Grace Robertson (mother) 0411 555 104", "Dr Anita Wang 07 3221 0990"],
+      "Grace Robertson",
+      ["Grace Robertson 0411 555 104", "On-call coordinator 07 3555 2001"]
+    ),
+    p2: participant(
+      "p2",
+      "Noah Singh",
+      ["allergy: peanuts"],
+      "Community access",
+      true,
+      ["Rakesh Singh (father) 0423 120 610"],
+      "Rakesh Singh",
+      ["Rakesh Singh 0423 120 610", "Program coordinator 07 3555 2002"]
+    ),
+    p3: participant(
+      "p3",
+      "Ella Hart",
+      ["behaviour support plan"],
+      "Respite",
+      true,
+      ["Kelly Hart (carer) 0433 882 311"],
+      "Kelly Hart",
+      ["Kelly Hart 0433 882 311", "Respite lead 07 3555 2003"]
+    ),
+    p4: participant(
+      "p4",
+      "Unit 5 residents",
+      ["group home"],
+      "Supported accommodation",
+      false,
+      ["House supervisor 07 3100 2221"],
+      "House supervisor",
+      ["House supervisor 07 3100 2221", "After-hours line 07 3555 2010"]
+    ),
+    p5: participant(
+      "p5",
+      "Luca Bennett",
+      ["vision impaired"],
+      "Community access",
+      true,
+      ["Helen Bennett (sister) 0402 775 668"],
+      "Helen Bennett",
+      ["Helen Bennett 0402 775 668", "Community coordinator 07 3555 2004"]
+    ),
+  };
+
+  function buildShift(seed) {
+    const dateKey = formatDateKey(addDays(TODAY, seed.dayOffset));
+    const participants = seed.participantIds.map(function (id) {
+      return participantDirectory[id];
+    });
+
+    const shift = {
+      id: seed.id,
+      date: dateKey,
+      startTime: seed.startTime,
+      endTime: seed.endTime,
+      breakDuration: seed.breakDuration || 0,
+      rosterName: seed.rosterName,
+      location: seed.location,
+      description: seed.description,
+      participants,
+      shiftType: seed.shiftType || "standard",
+      tags: seed.tags || [],
+      assets: seed.assets || [],
+      tasks: seed.tasks || [],
+      notes: {
+        client: seed.clientNotes || "",
+        general: seed.generalNotes || "",
+        attendance: participants.reduce(function (acc, current) {
+          if (current.isNdis) acc[current.id] = false;
+          return acc;
+        }, {}),
+      },
+      documents: seed.documents || [],
+      allowances: seed.allowances || [],
+      transportLogs: seed.transportLogs || [],
+      sleepover:
+        seed.shiftType === "sleepover"
+          ? {
+              room: "Staff room B",
+              handover: "Confirm medication lockbox and overnight call protocol.",
+              disturbances: seed.disturbances || [],
+            }
+          : null,
+      workflow: {
+        checkedInAt: seed.checkedInAt || null,
+        checkedOutAt: seed.checkedOutAt || null,
+        actualWorkedMinutes: seed.actualWorkedMinutes || null,
+        manualStatus: seed.manualStatus || null,
+      },
+      status: seed.initialStatus || "not_started",
+    };
+
+    return shift;
+  }
+
+  const mockShifts = [
+    buildShift({
+      id: "shift-1001",
+      dayOffset: 0,
+      startTime: "07:00",
+      endTime: "15:00",
+      breakDuration: 30,
+      rosterName: "Morning personal care",
+      location: "Unit 5, New Farm",
+      description:
+        "Morning support including medication prompt, personal care, and breakfast routine.",
+      participantIds: ["p1", "p4"],
+      tags: ["personal care", "medication", "cleaning"],
+      assets: ["Medication chart", "House keys"],
+      tasks: [
+        { id: "task-1", title: "Complete morning medication prompt", done: true },
+        { id: "task-2", title: "Assist with shower routine for Mia", done: false },
+        { id: "task-3", title: "Update communication book", done: false },
+      ],
+      documents: ["Medication administration record", "Behaviour support summary"],
+      checkedInAt: null,
+      checkedOutAt: null,
+      initialStatus: "not_started",
+    }),
+    buildShift({
+      id: "shift-1002",
+      dayOffset: 0,
+      startTime: "16:00",
+      endTime: "22:00",
+      rosterName: "Community access afternoon",
+      location: "Westfield Chermside",
+      description:
+        "Support community participation, dinner outing, and transport home.",
+      participantIds: ["p2", "p5"],
+      tags: ["community access", "transport"],
+      assets: ["Van access card"],
+      tasks: [
+        { id: "task-4", title: "Confirm return transport timing", done: true },
+        { id: "task-5", title: "Support dinner budget tracking", done: false },
+      ],
+      documents: ["Community access plan"],
+      checkedInAt: new Date().toISOString(),
+      initialStatus: "in_progress",
+      transportLogs: [
+        { id: "trip-1", mode: "manual", from: "Hub", to: "Chermside", km: 14, notes: "Outbound" },
+      ],
+    }),
+    buildShift({
+      id: "shift-1003",
+      dayOffset: 1,
+      startTime: "20:00",
+      endTime: "08:00",
+      rosterName: "Sleepover SIL",
+      location: "Unit 12, Indooroopilly",
+      description:
+        "Overnight sleepover with morning handover and medication observation.",
+      participantIds: ["p1", "p3"],
+      shiftType: "sleepover",
+      tags: ["sleepover", "medication", "handover"],
+      assets: ["Sleepover checklist", "Incident folder"],
+      tasks: [
+        { id: "task-6", title: "Complete overnight environment check", done: false },
+        { id: "task-7", title: "Prepare morning handover note", done: false },
+      ],
+      disturbances: [
+        { id: "dist-1", time: "01:40", note: "Mia requested reassurance after noise outside." },
+      ],
+      documents: ["Sleepover procedure", "Emergency evacuation plan"],
+      initialStatus: "not_started",
+    }),
+    buildShift({
+      id: "shift-1004",
+      dayOffset: 2,
+      startTime: "09:00",
+      endTime: "13:00",
+      rosterName: "Clinic escort",
+      location: "RBWH Outpatients",
+      description: "Escort to allied health appointment and complete return handover.",
+      participantIds: ["p5"],
+      tags: ["community access", "appointment"],
+      tasks: [
+        { id: "task-8", title: "Carry referral paperwork", done: false },
+        { id: "task-9", title: "Record appointment outcomes", done: false },
+      ],
+      documents: ["Appointment referral", "Transport authorisation"],
+      initialStatus: "not_started",
+    }),
+    buildShift({
+      id: "shift-1005",
+      dayOffset: -1,
+      startTime: "06:30",
+      endTime: "14:30",
+      breakDuration: 30,
+      rosterName: "House support",
+      location: "Kedron house",
+      description: "Domestic support, meal prep, and morning routines across the house.",
+      participantIds: ["p4"],
+      tags: ["cleaning", "meal prep"],
+      tasks: [
+        { id: "task-10", title: "Fridge temperature check", done: true },
+        { id: "task-11", title: "Laundry cycle for Unit 5", done: true },
+      ],
+      checkedInAt: null,
+      checkedOutAt: null,
+      initialStatus: "missing_check_in",
+    }),
+    buildShift({
+      id: "shift-1006",
+      dayOffset: -2,
+      startTime: "14:00",
+      endTime: "22:00",
+      rosterName: "Evening respite",
+      location: "Albany Creek respite house",
+      description: "Support dinner, social activities, and evening medications.",
+      participantIds: ["p3"],
+      tags: ["respite", "medication"],
+      tasks: [
+        { id: "task-12", title: "Evening medication prompt", done: true },
+        { id: "task-13", title: "End-of-shift kitchen reset", done: true },
+      ],
+      clientNotes: "Ella engaged well after sensory break.",
+      generalNotes: "Family requested update at pickup.",
+      checkedInAt: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
+      checkedOutAt: null,
+      initialStatus: "missing_check_out",
+    }),
+    buildShift({
+      id: "shift-1007",
+      dayOffset: -1,
+      startTime: "10:00",
+      endTime: "16:00",
+      rosterName: "Skill building session",
+      location: "Stafford community hub",
+      description:
+        "Goal-based support focusing on budgeting, shopping, and independent travel skills.",
+      participantIds: ["p2"],
+      tags: ["community access", "capacity building"],
+      tasks: [
+        { id: "task-14", title: "Review weekly budgeting worksheet", done: true },
+        { id: "task-15", title: "Practice bus route planning", done: true },
+      ],
+      clientNotes: "Noah independently used the checkout with verbal prompts only.",
+      generalNotes: "Receipts filed in participant folder.",
+      checkedInAt: new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString(),
+      checkedOutAt: new Date(Date.now() - 18 * 60 * 60 * 1000).toISOString(),
+      actualWorkedMinutes: 355,
+      initialStatus: "completed_recent",
+      allowances: [{ id: "allow-1", type: "Meal", amount: 18.5, notes: "Worker meal with participant" }],
+      transportLogs: [{ id: "trip-2", mode: "manual", from: "Hub", to: "Stafford", km: 9, notes: "Round trip recorded" }],
+    }),
+    buildShift({
+      id: "shift-1008",
+      dayOffset: -5,
+      startTime: "07:00",
+      endTime: "15:00",
+      rosterName: "Morning SIL",
+      location: "Woolloongabba unit",
+      description: "Daily living support with breakfast prep and community plan review.",
+      participantIds: ["p1"],
+      tags: ["personal care", "planning"],
+      tasks: [
+        { id: "task-16", title: "Review weekly planner", done: true },
+      ],
+      checkedInAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000 + 10 * 60 * 1000).toISOString(),
+      checkedOutAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000 + 8 * 60 * 60 * 1000).toISOString(),
+      actualWorkedMinutes: 450,
+      initialStatus: "completed",
+    }),
+    buildShift({
+      id: "shift-1009",
+      dayOffset: -8,
+      startTime: "13:00",
+      endTime: "19:00",
+      rosterName: "Approved social support",
+      location: "South Bank",
+      description: "Museum visit and dinner support with approved mileage claim.",
+      participantIds: ["p5"],
+      tags: ["community access", "transport"],
+      tasks: [{ id: "task-17", title: "Submit participant outing summary", done: true }],
+      checkedInAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+      checkedOutAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000 + 6 * 60 * 60 * 1000).toISOString(),
+      actualWorkedMinutes: 370,
+      initialStatus: "approved",
+      allowances: [{ id: "allow-2", type: "Kilometres", amount: 24.6, notes: "Approved mileage claim" }],
+    }),
+    buildShift({
+      id: "shift-1010",
+      dayOffset: -10,
+      startTime: "09:00",
+      endTime: "12:00",
+      rosterName: "Rejected timesheet example",
+      location: "Virtual check-in",
+      description: "Prototype example of rejected shift for workflow testing.",
+      participantIds: ["p2"],
+      tags: ["admin"],
+      tasks: [{ id: "task-18", title: "Update service agreement note", done: true }],
+      checkedInAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
+      checkedOutAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000 + 2.5 * 60 * 60 * 1000).toISOString(),
+      actualWorkedMinutes: 150,
+      initialStatus: "rejected",
+      generalNotes: "Rejected due to overlap with training booking.",
+    }),
+  ];
+
+  APP.data = {
+    TODAY,
+    STATUS_META,
+    FORMS_LIBRARY: [
+      "Medication observation form",
+      "Bowel chart",
+      "Behaviour incident record",
+      "Community access checklist",
+      "Meal support form",
+      "Progress against goals form",
+    ],
+    ALLOWANCE_OPTIONS: [
+      { id: "meal", label: "Meal allowance", unitLabel: "Meals" },
+      { id: "km", label: "Kilometre allowance", unitLabel: "Kilometres" },
+      { id: "sleepover", label: "Sleepover allowance", unitLabel: "Nights" },
+      { id: "laundry", label: "Laundry allowance", unitLabel: "Loads" },
+    ],
+    mockShifts,
+  };
+})();
