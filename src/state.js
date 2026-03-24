@@ -214,8 +214,19 @@
   }
 
   function setActiveWeekStartDate(dateKey) {
-    state.activeWeekStartDate = dateKey;
-    state.selectedDate = dateKey;
+    const monday = getMonday(new Date(dateKey + "T00:00:00"));
+    const mondayKey = formatDateKey(monday);
+    state.activeWeekStartDate = mondayKey;
+    state.selectedDate = mondayKey;
+    notify();
+  }
+
+  function shiftActiveWeek(weekOffset) {
+    const currentMonday = getMonday(new Date(state.activeWeekStartDate + "T00:00:00"));
+    currentMonday.setDate(currentMonday.getDate() + weekOffset * 7);
+    const mondayKey = formatDateKey(currentMonday);
+    state.activeWeekStartDate = mondayKey;
+    state.selectedDate = mondayKey;
     notify();
   }
 
@@ -529,6 +540,7 @@
     closeNotifications,
     closeOverlays,
     setActiveWeekStartDate,
+    shiftActiveWeek,
     setSelectedDate,
     openCalendarOverlay,
     openFilterOverlay,

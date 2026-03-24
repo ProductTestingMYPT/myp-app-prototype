@@ -247,9 +247,11 @@
       "</div>" +
       "</section>" +
       '<section class="week-controls compact-week-controls">' +
+      '<div class="week-nav-row">' +
+      '<button class="week-button button-compact" data-action="shift-week" data-week-offset="-1" aria-label="Previous week">Prev</button>' +
       "<div><strong>" +
       escapeHtml(getWeekRangeLabel(store.state.activeWeekStartDate)) +
-      "</strong></div>" +
+      '</strong></div><button class="week-button button-compact" data-action="shift-week" data-week-offset="1" aria-label="Next week">Next</button></div>' +
       "</section>" +
       '<section class="week-carousel" data-week-strip>' +
       '<div class="week-slide" data-week-slide data-week-start="' +

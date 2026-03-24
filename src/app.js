@@ -51,13 +51,11 @@
 
         if (Math.abs(deltaX) < 36 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
 
-        const direction = deltaX < 0 ? 7 : -7;
+        const weekOffset = deltaX < 0 ? 1 : -1;
         weekGesture.handled = true;
         suppressNextDayTap = true;
         pendingWeekAnimation = deltaX < 0 ? "next" : "previous";
-        store.setActiveWeekStartDate(
-          ui.plusDays(store.state.activeWeekStartDate, direction)
-        );
+        store.shiftActiveWeek(weekOffset);
         event.preventDefault();
       },
       { passive: false }
@@ -110,6 +108,13 @@
     if (action === "close-notifications") store.closeNotifications();
     if (action === "close-overlays") store.closeOverlays();
     if (action === "go-page") store.setPage(target.getAttribute("data-page"));
+    if (action === "shift-week") {
+      const offset = Number(target.getAttribute("data-week-offset") || 0);
+      if (offset) {
+        pendingWeekAnimation = offset > 0 ? "next" : "previous";
+        store.shiftActiveWeek(offset);
+      }
+    }
     if (action === "select-date") {
       if (suppressNextDayTap) return;
       store.setSelectedDate(target.getAttribute("data-date"));
