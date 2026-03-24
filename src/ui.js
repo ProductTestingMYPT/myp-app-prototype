@@ -159,6 +159,17 @@
     return timing.join(" | ");
   }
 
+  function getDisturbanceClientNames(shift, item) {
+    const clientIds = item.clientIds || [];
+    return shift.participants
+      .filter(function (participant) {
+        return clientIds.includes(participant.id);
+      })
+      .map(function (participant) {
+        return participant.name;
+      });
+  }
+
   function renderIcon(name) {
     const icons = {
       menu:
@@ -228,9 +239,6 @@
         "</div></div>" +
         '<div class="metric-item"><div class="field-label">Actual worked</div><div>' +
         escapeHtml(formatShiftWorkedLabel(shift)) +
-        "</div></div>" +
-        '<div class="metric-item"><div class="field-label">Final status</div><div>' +
-        escapeHtml(data.STATUS_META[shift.status].label) +
         "</div></div>" +
         "</div>"
       : '<div class="field-grid">' +
@@ -447,9 +455,6 @@
           "</div></div>" +
           '<div class="metric-item"><div class="field-label">Actual worked</div><div>' +
           escapeHtml(formatShiftWorkedLabel(shift)) +
-          "</div></div>" +
-          '<div class="metric-item"><div class="field-label">Final status</div><div>' +
-          escapeHtml(data.STATUS_META[shift.status].label) +
           "</div></div></div></section>"
         : "")
     );
@@ -635,24 +640,13 @@
   function renderSleepoverTab(shift) {
     if (shift.shiftType !== "sleepover") return "";
     return (
-      '<section class="section-block section-block-tight"><h3 class="section-title">Sleepover information</h3><div class="field-grid compact-grid">' +
-      '<div class="field"><span class="field-label">Staff room</span><span>' +
-      escapeHtml(shift.sleepover.room) +
-      "</span></div>" +
-      '<div class="field"><span class="field-label">Handover</span><span>' +
-      escapeHtml(shift.sleepover.handover) +
-      "</span></div>" +
-      '<div class="field"><span class="field-label">Active support</span><span>' +
-      escapeHtml(shift.sleepover.eveningSupport + " and " + shift.sleepover.morningSupport) +
-      '</span></div><div class="field"><span class="field-label">Paid support</span><span>' +
-      escapeHtml(formatDurationMinutes(shift.sleepover.paidSupportMinutes) + " + sleepover") +
-      "</span></div></div></section>" +
-      '<section class="section-block section-block-tight"><div class="section-heading-row"><div><h3 class="section-title">Disturbances log</h3><div class="subtle">Add the timing here. Add details of the disturbance in Notes.</div></div><button class="ghost-button button-compact" data-action="open-add-disturbance" data-shift-id="' +
+      '<section class="section-block section-block-tight"><div class="section-heading-row"><h3 class="section-title">Sleep disturbances</h3><button class="ghost-button button-compact" data-action="open-add-disturbance" data-shift-id="' +
       shift.id +
-      '">Log sleep disturbance</button></div><div class="list-stack">' +
+      '">Add sleep disturbance</button></div><div class="list-stack">' +
       (shift.sleepover.disturbances.length
         ? shift.sleepover.disturbances
             .map(function (item) {
+              const clientNames = getDisturbanceClientNames(shift, item);
               return (
                 '<button class="list-item-button" data-action="edit-disturbance" data-shift-id="' +
                 shift.id +
@@ -664,7 +658,11 @@
                 escapeHtml(!item.endTime || item.durationMinutes === "" || item.durationMinutes == null ? "Incomplete" : "Complete") +
                 '</span></div><div class="subtle">' +
                 escapeHtml(renderDisturbanceSummary(item)) +
-                '</div><div class="subtle">Tap to edit record</div></button>'
+                "</div>" +
+                (clientNames.length
+                  ? '<div class="subtle">' + escapeHtml(clientNames.join(", ")) + "</div>"
+                  : "") +
+                '<div class="subtle">Tap to edit record</div></button>'
               );
             })
             .join("")
@@ -745,13 +743,15 @@
       " | " +
       escapeHtml(shift.location) +
       "</p></div></div>" +
-      '<div class="tab-scroll"><div class="tab-row tab-row-detail">' +
+      '<div class="tab-scroll" data-tab-scroll><div class="tab-row tab-row-detail">' +
       tabs
         .map(function (tab) {
           return (
             '<button class="tab-button ' +
             (store.state.selectedTab === tab.id ? "active" : "") +
             '" data-action="select-tab" data-tab="' +
+            tab.id +
+            '" data-tab-button="' +
             tab.id +
             '">' +
             escapeHtml(tab.label) +
@@ -1100,19 +1100,55 @@
   }
 
   function renderDisturbanceOverlay(overlay) {
+    const shift = store.state.shifts.find(function (entry) {
+      return entry.id === overlay.shiftId;
+    });
+    const selectedClientNames = shift.participants
+      .filter(function (participant) {
+        return (overlay.draft.clientIds || []).includes(participant.id);
+      })
+      .map(function (participant) {
+        return participant.name;
+      });
     return (
       '<section class="overlay-sheet"><div class="overlay-sheet-header"><div><div class="overlay-kicker">Sleepover</div><h2 class="overlay-title">' +
       (overlay.disturbanceId ? "Edit sleep disturbance" : "Log sleep disturbance") +
       '</h2></div><button class="ghost-button button-compact" data-action="close-overlay">Close</button></div>' +
-      '<div class="overlay-sheet-body"><div class="subtle" style="margin-bottom:0.9rem">Add the timing here. Add details of the disturbance in Notes.</div><div class="field"><span class="field-label">Start date</span><input class="text-input" type="date" value="' +
+      '<div class="overlay-sheet-body"><div class="field"><span class="field-label">Start date</span><input class="text-input" type="date" value="' +
       escapeHtml(overlay.draft.startDate || "") +
       '" data-action="disturbance-draft-input" data-field="startDate" /></div><div class="field"><span class="field-label">Start of disturbance</span><input class="text-input" type="time" value="' +
       escapeHtml(overlay.draft.startTime || "") +
       '" data-action="disturbance-draft-input" data-field="startTime" /></div><div class="field"><span class="field-label">Duration</span><input class="text-input" type="number" min="0" step="5" value="' +
       escapeHtml(overlay.draft.durationMinutes || "") +
-      '" data-action="disturbance-draft-input" data-field="durationMinutes" /><div class="subtle">Leave blank if the disturbance is still in progress.</div></div><div class="field"><span class="field-label">End of disturbance</span><input class="text-input" type="time" value="' +
+      '" data-action="disturbance-draft-input" data-field="durationMinutes" /></div><div class="field"><span class="field-label">End of disturbance</span><input class="text-input" type="time" value="' +
       escapeHtml(overlay.draft.endTime || "") +
-      '" data-action="disturbance-draft-input" data-field="endTime" /></div><div class="actions-row"><button class="ghost-button" data-action="close-overlay">Cancel</button><button class="solid-button" data-action="save-disturbance">Save</button></div></div></section>'
+      '" data-action="disturbance-draft-input" data-field="endTime" /></div><div class="field"><span class="field-label">Client names</span><select class="select-input" multiple size="' +
+      Math.min(Math.max(shift.participants.length, 2), 4) +
+      '" data-action="disturbance-client-change">' +
+      shift.participants
+        .map(function (participant) {
+          return (
+            '<option value="' +
+            participant.id +
+            '" ' +
+            ((overlay.draft.clientIds || []).includes(participant.id) ? "selected" : "") +
+            ">" +
+            escapeHtml(participant.name) +
+            "</option>"
+          );
+        })
+        .join("") +
+      "</select>" +
+      (selectedClientNames.length
+        ? '<div class="linked-list" style="margin-top:0.55rem">' +
+          selectedClientNames
+            .map(function (name) {
+              return '<div class="linked-pill">' + escapeHtml(name) + "</div>";
+            })
+            .join("") +
+          "</div>"
+        : '<div class="subtle" style="margin-top:0.4rem">Select one or more clients.</div>') +
+      '</div><div class="actions-row"><button class="ghost-button" data-action="close-overlay">Cancel</button><button class="solid-button" data-action="save-disturbance">Save</button></div></div></section>'
     );
   }
 
@@ -1134,6 +1170,16 @@
     }
 
     switch (store.state.currentPage) {
+      case "login":
+        return (
+          '<section class="section-stack login-page"><section class="section-block section-block-tight"><h1 class="page-title">Log in</h1><div class="field" style="margin-top:0.9rem"><span class="field-label">Worker ID or name</span><input class="text-input" value="' +
+          escapeHtml(store.state.loginInput || "") +
+          '" data-action="login-input" placeholder="Type anything or leave blank" /></div><div class="actions-row" style="margin-top:1rem"><button class="solid-button prominent-action" data-action="mock-login">Log in</button></div></section></section>'
+        );
+      case "loading":
+        return (
+          '<section class="placeholder-page"><h1 class="page-title">Loading your schedule...</h1><p class="subtle">Please wait a moment.</p></section>'
+        );
       case "schedule":
         return renderSchedulePage();
       case "leave":
@@ -1159,17 +1205,21 @@
     plusDays,
     renderTimerValue: formatDurationFrom,
     renderApp: function () {
+      const liveShift = store.getLiveTimerShift();
+      if (store.state.currentPage === "login" || store.state.currentPage === "loading") {
+        return '<div class="app-shell"><main class="content">' + renderCurrentPage() + "</main></div>";
+      }
       return (
         '<div class="app-shell">' +
         '<header class="topbar">' +
         '<div class="topbar-utility"><button class="icon-button icon-only-button" data-action="toggle-menu" aria-label="Open menu">' +
         renderIcon("menu") +
         '</button><div class="topbar-center">' +
-        (store.getActiveShift()
+        (liveShift
           ? '<button class="active-timer-link" data-action="resume-active-shift"><span class="subtle">On shift</span> <strong data-live-timer="' +
-            store.getActiveShift().id +
+            liveShift.id +
             '">' +
-            escapeHtml(formatDurationFrom(store.getActiveShift().workflow.checkedInAt)) +
+            escapeHtml(formatDurationFrom(liveShift.workflow.checkedInAt)) +
             "</strong></button>"
           : "") +
         '</div><button class="icon-button icon-only-button" data-action="toggle-notifications" aria-label="Open notifications">' +

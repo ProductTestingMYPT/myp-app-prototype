@@ -7,12 +7,21 @@
   let weekGesture = null;
   let suppressNextDayTap = false;
   let pendingWeekAnimation = "";
+  let detailTabScrollLeft = 0;
+  let loadingTimerId = null;
 
   function render() {
+    const existingTabScroll = document.querySelector("[data-tab-scroll]");
+    if (existingTabScroll) {
+      detailTabScrollLeft = existingTabScroll.scrollLeft;
+    }
     store.recomputeAllStatuses();
     root.innerHTML = ui.renderApp();
     bindWeekSwipe();
+    bindDetailTabScroll();
     applyWeekAnimation();
+    restoreDetailTabScroll();
+    syncLoadingFlow();
     updateLiveUi();
   }
 
@@ -74,6 +83,44 @@
     });
   }
 
+  function bindDetailTabScroll() {
+    const strip = document.querySelector("[data-tab-scroll]");
+    if (!strip || strip.getAttribute("data-bound") === "true") return;
+    strip.setAttribute("data-bound", "true");
+    strip.addEventListener("scroll", function () {
+      detailTabScrollLeft = strip.scrollLeft;
+    });
+  }
+
+  function restoreDetailTabScroll() {
+    const strip = document.querySelector("[data-tab-scroll]");
+    if (!strip) {
+      detailTabScrollLeft = 0;
+      return;
+    }
+    strip.scrollLeft = detailTabScrollLeft;
+    const selectedTab = strip.querySelector('[data-tab-button="' + store.state.selectedTab + '"]');
+    if (selectedTab && typeof selectedTab.scrollIntoView === "function") {
+      selectedTab.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+  }
+
+  function syncLoadingFlow() {
+    if (store.state.currentPage === "loading") {
+      if (loadingTimerId) return;
+      loadingTimerId = window.setTimeout(function () {
+        loadingTimerId = null;
+        store.completeLoginFlow();
+      }, 3500);
+      return;
+    }
+
+    if (loadingTimerId) {
+      window.clearTimeout(loadingTimerId);
+      loadingTimerId = null;
+    }
+  }
+
   function setAutosaveIndicator(type, shiftId, participantId) {
     const selector =
       '[data-autosave-indicator="' +
@@ -89,7 +136,7 @@
   }
 
   function updateLiveUi() {
-    const activeShift = store.getActiveShift();
+    const activeShift = store.getLiveTimerShift();
     document.querySelectorAll("[data-live-timer]").forEach(function (node) {
       if (!activeShift || node.getAttribute("data-live-timer") !== activeShift.id) return;
       node.textContent = ui.renderTimerValue(activeShift.workflow.checkedInAt);
@@ -108,6 +155,7 @@
     if (action === "close-notifications") store.closeNotifications();
     if (action === "close-overlays") store.closeOverlays();
     if (action === "go-page") store.setPage(target.getAttribute("data-page"));
+    if (action === "mock-login") store.startLoginFlow();
     if (action === "shift-week") {
       const offset = Number(target.getAttribute("data-week-offset") || 0);
       if (offset) {
@@ -203,6 +251,14 @@
     if (action === "allowance-type-change") {
       store.setAllowanceType(target.value);
     }
+    if (action === "disturbance-client-change") {
+      const selectedValues = Array.from(target.selectedOptions).map(function (option) {
+        return option.value;
+      });
+      Array.from(target.options).forEach(function (option) {
+        store.toggleDisturbanceClient(option.value, selectedValues.includes(option.value));
+      });
+    }
     if (action === "filter-change") {
       store.updateFilterDraft(target.getAttribute("data-field"), target.value);
     }
@@ -245,6 +301,10 @@
 
     if (action === "form-search-input") {
       store.setFormSearch(target.value);
+    }
+
+    if (action === "login-input") {
+      store.setLoginInput(target.value);
     }
 
     if (action === "allowance-quantity-input") {

@@ -40,7 +40,8 @@
     }
 
     if (checkedIn) {
-      shift.status = now > shiftEnd ? "missing_check_out" : "in_progress";
+      const missingCheckOutAt = new Date(shiftEnd.getTime() + 10 * 60 * 1000);
+      shift.status = now > missingCheckOutAt ? "missing_check_out" : "in_progress";
       return shift.status;
     }
 
@@ -86,9 +87,11 @@
   }
 
   const state = {
-    currentPage: "schedule",
+    currentPage: "login",
     selectedShiftId: null,
     selectedTab: "shift",
+    loginInput: "",
+    liveTimerShiftId: null,
     activeWeekStartDate: null,
     selectedDate: null,
     isMenuOpen: false,
@@ -147,10 +150,21 @@
 
   function getActiveShift() {
     return (
-      state.shifts.find(function (shift) {
-        return Boolean(shift.workflow.checkedInAt) && !shift.workflow.checkedOutAt;
-      }) || null
+      state.shifts
+        .filter(function (shift) {
+          return Boolean(shift.workflow.checkedInAt) && !shift.workflow.checkedOutAt;
+        })
+        .sort(function (a, b) {
+          return new Date(b.workflow.checkedInAt).getTime() - new Date(a.workflow.checkedInAt).getTime();
+        })[0] || null
     );
+  }
+
+  function getLiveTimerShift() {
+    if (!state.liveTimerShiftId) return null;
+    const shift = getShiftById(state.liveTimerShiftId);
+    if (!shift || !shift.workflow.checkedInAt || shift.workflow.checkedOutAt) return null;
+    return shift;
   }
 
   function getShiftById(shiftId) {
@@ -235,6 +249,24 @@
     notify();
   }
 
+  function setLoginInput(value) {
+    state.loginInput = value;
+    notify();
+  }
+
+  function startLoginFlow() {
+    state.currentPage = "loading";
+    state.selectedShiftId = null;
+    state.selectedTab = "shift";
+    state.activeOverlay = null;
+    notify();
+  }
+
+  function completeLoginFlow() {
+    state.currentPage = "schedule";
+    notify();
+  }
+
   function openCalendarOverlay() {
     const selectedDate = new Date(state.selectedDate + "T00:00:00");
     state.activeOverlay = {
@@ -303,7 +335,7 @@
   }
 
   function openActiveShift() {
-    const activeShift = getActiveShift();
+    const activeShift = getLiveTimerShift() || getActiveShift();
     if (!activeShift) return;
     state.currentPage = "schedule";
     state.selectedShiftId = activeShift.id;
@@ -330,13 +362,19 @@
       shift.workflow.checkedInAt = new Date().toISOString();
       shift.workflow.checkedOutAt = null;
       shift.workflow.manualStatus = null;
+      state.liveTimerShiftId = shiftId;
     });
   }
 
   function checkOut(shiftId) {
     updateShift(shiftId, function (shift) {
       shift.workflow.checkedOutAt = new Date().toISOString();
+      shift.workflow.actualWorkedMinutes = diffMinutes(
+        new Date(shift.workflow.checkedInAt || toDate(shift.date, shift.startTime)),
+        new Date(shift.workflow.checkedOutAt)
+      ) - (shift.breakDuration || 0);
       shift.workflow.manualStatus = null;
+      if (state.liveTimerShiftId === shiftId) state.liveTimerShiftId = null;
       state.activeOverlay = null;
     });
   }
@@ -414,12 +452,14 @@
             startTime: existing.startTime || "",
             durationMinutes: existing.durationMinutes != null ? String(existing.durationMinutes) : "",
             endTime: existing.endTime || "",
+            clientIds: existing.clientIds ? existing.clientIds.slice() : [],
           }
         : {
             startDate: shift.date,
             startTime: "",
             durationMinutes: "",
             endTime: "",
+            clientIds: [],
           },
     };
     notify();
@@ -517,6 +557,19 @@
     state.activeOverlay.draft[field] = value;
   }
 
+  function toggleDisturbanceClient(clientId, isSelected) {
+    if (!state.activeOverlay || state.activeOverlay.type !== "sleep-disturbance") return;
+    const clientIds = state.activeOverlay.draft.clientIds || [];
+    if (isSelected) {
+      if (!clientIds.includes(clientId)) clientIds.push(clientId);
+    } else {
+      state.activeOverlay.draft.clientIds = clientIds.filter(function (entry) {
+        return entry !== clientId;
+      });
+    }
+    notify();
+  }
+
   function setAllowanceType(typeId) {
     if (!state.activeOverlay || state.activeOverlay.type !== "allowance") return;
     const option = data.ALLOWANCE_OPTIONS.find(function (entry) {
@@ -574,6 +627,7 @@
           startTime: draft.startTime || "",
           durationMinutes: draft.durationMinutes === "" ? "" : Number(draft.durationMinutes),
           endTime: draft.endTime || "",
+          clientIds: (draft.clientIds || []).slice(),
         };
         const index = shift.sleepover.disturbances.findIndex(function (entry) {
           return entry.id === overlay.disturbanceId;
@@ -604,6 +658,9 @@
     setActiveWeekStartDate,
     shiftActiveWeek,
     setSelectedDate,
+    setLoginInput,
+    startLoginFlow,
+    completeLoginFlow,
     openCalendarOverlay,
     openFilterOverlay,
     updateFilterDraft,
@@ -617,6 +674,7 @@
     setTab,
     getSelectedShift,
     getActiveShift,
+    getLiveTimerShift,
     checkIn,
     checkOut,
     toggleTask,
@@ -636,6 +694,7 @@
     toggleClientInfoAccordion,
     updateAllowanceDraft,
     updateDisturbanceDraft,
+    toggleDisturbanceClient,
     setAllowanceType,
     saveAllowanceDraft,
     saveDisturbanceDraft,
