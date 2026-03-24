@@ -25,6 +25,14 @@
     return next;
   }
 
+  function getMonday(date) {
+    const next = new Date(date);
+    next.setHours(0, 0, 0, 0);
+    const day = next.getDay() || 7;
+    next.setDate(next.getDate() - day + 1);
+    return next;
+  }
+
   function formatDateKey(date) {
     return [
       date.getFullYear(),
@@ -104,7 +112,7 @@
   };
 
   function buildShift(seed) {
-    const dateKey = formatDateKey(addDays(TODAY, seed.dayOffset));
+    const dateKey = seed.date || formatDateKey(addDays(TODAY, seed.dayOffset));
     const participants = seed.participantIds.map(function (id) {
       return participantDirectory[id];
     });
@@ -357,6 +365,168 @@
       generalNotes: "Rejected due to overlap with training booking.",
     }),
   ];
+
+  const rosterTemplates = [
+    {
+      rosterName: "Morning personal care",
+      startTime: "07:00",
+      endTime: "15:00",
+      breakDuration: 30,
+      location: "Unit 5, New Farm",
+      description: "Morning support including personal care, breakfast, and documentation.",
+      participantIds: ["p1", "p4"],
+      tags: ["personal care", "cleaning"],
+      assets: ["House keys", "Medication chart"],
+      documents: ["Daily support notes"],
+    },
+    {
+      rosterName: "Community access afternoon",
+      startTime: "13:00",
+      endTime: "19:00",
+      location: "Brisbane community locations",
+      description: "Support community participation, transport, and goal-based activity.",
+      participantIds: ["p2", "p5"],
+      tags: ["community access", "transport"],
+      assets: ["Van access card"],
+      documents: ["Community access plan"],
+    },
+    {
+      rosterName: "Respite evening support",
+      startTime: "15:00",
+      endTime: "21:00",
+      location: "Albany Creek respite house",
+      description: "Evening support, meal assistance, and end-of-day handover.",
+      participantIds: ["p3"],
+      tags: ["respite", "meal support"],
+      assets: ["Respite checklist"],
+      documents: ["Evening routine sheet"],
+    },
+    {
+      rosterName: "Clinic escort",
+      startTime: "09:00",
+      endTime: "13:00",
+      location: "Metro North health sites",
+      description: "Escort to appointment and document transport and outcomes.",
+      participantIds: ["p5"],
+      tags: ["appointment", "transport"],
+      assets: ["Referral paperwork"],
+      documents: ["Appointment referral"],
+    },
+  ];
+
+  function shiftSeedForStatus(status, dateKey, startTime, endTime, breakDuration) {
+    const startIso = isoDateTime(dateKey, startTime);
+    const endIso = isoDateTime(dateKey, endTime);
+    const actualWorkedMinutes = Math.max(
+      0,
+      (Number(endTime.slice(0, 2)) * 60 + Number(endTime.slice(3, 5)) + (endTime < startTime ? 24 * 60 : 0)) -
+        (Number(startTime.slice(0, 2)) * 60 + Number(startTime.slice(3, 5))) -
+        (breakDuration || 0)
+    );
+
+    if (status === "approved" || status === "completed" || status === "rejected") {
+      return {
+        checkedInAt: startIso,
+        checkedOutAt: endIso,
+        actualWorkedMinutes,
+        initialStatus: status,
+        manualStatus: status === "approved" || status === "rejected" ? status : null,
+        breakDuration: breakDuration || 0,
+      };
+    }
+
+    if (status === "not_started") {
+      return {
+        checkedInAt: null,
+        checkedOutAt: null,
+        initialStatus: "not_started",
+      };
+    }
+
+    return {
+      checkedInAt: null,
+      checkedOutAt: null,
+      initialStatus: status,
+    };
+  }
+
+  function generateExtendedShifts() {
+    const generated = [];
+    const existingDates = new Set(
+      mockShifts.map(function (shift) {
+        return shift.date + "|" + shift.rosterName;
+      })
+    );
+    const baseMonday = getMonday(TODAY);
+    let idCounter = 2000;
+
+    for (let weekOffset = -4; weekOffset <= 6; weekOffset += 1) {
+      const weekStart = addDays(baseMonday, weekOffset * 7);
+
+      for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
+        const slotCount = (weekOffset + dayIndex + 14) % 4 === 0 ? 0 : (weekOffset + dayIndex) % 3 === 0 ? 2 : 1;
+        if (slotCount === 0) continue;
+
+        for (let slot = 0; slot < slotCount; slot += 1) {
+          const template = rosterTemplates[(dayIndex + slot + weekOffset + 8) % rosterTemplates.length];
+          const dayDate = addDays(weekStart, dayIndex);
+          const dateKey = formatDateKey(dayDate);
+          const shiftType =
+            dayIndex === 4 && slot === 0 && (weekOffset === -2 || weekOffset === 1 || weekOffset === 4)
+              ? "sleepover"
+              : "standard";
+          const status =
+            weekOffset < 0
+              ? ["completed", "approved", "rejected"][(dayIndex + slot + 6) % 3]
+              : weekOffset > 0
+                ? "not_started"
+                : dayDate < TODAY
+                  ? ["completed", "approved"][(dayIndex + slot) % 2]
+                  : "not_started";
+          const rosterName =
+            shiftType === "sleepover" ? "Sleepover SIL" : template.rosterName;
+
+          if (existingDates.has(dateKey + "|" + rosterName)) continue;
+
+          const baseSeed = {
+            id: "shift-" + idCounter++,
+            date: dateKey,
+            startTime: shiftType === "sleepover" ? "20:00" : template.startTime,
+            endTime: shiftType === "sleepover" ? "08:00" : template.endTime,
+            breakDuration: template.breakDuration || 0,
+            rosterName: rosterName,
+            location: template.location,
+            description: template.description,
+            participantIds: template.participantIds,
+            shiftType: shiftType,
+            tags: shiftType === "sleepover" ? ["sleepover", "handover"] : template.tags,
+            assets: shiftType === "sleepover" ? ["Sleepover checklist"] : template.assets,
+            documents: shiftType === "sleepover" ? ["Sleepover procedure"] : template.documents,
+            tasks: [
+              { id: "task-" + idCounter + "-a", title: "Complete shift handover", done: status !== "not_started" },
+              { id: "task-" + idCounter + "-b", title: "Update progress notes", done: status !== "not_started" },
+            ],
+          };
+
+          if (shiftType === "sleepover") {
+            baseSeed.disturbances = [];
+          }
+
+          Object.assign(
+            baseSeed,
+            shiftSeedForStatus(status, dateKey, baseSeed.startTime, baseSeed.endTime, baseSeed.breakDuration)
+          );
+
+          generated.push(buildShift(baseSeed));
+          existingDates.add(dateKey + "|" + rosterName);
+        }
+      }
+    }
+
+    return generated;
+  }
+
+  mockShifts.push.apply(mockShifts, generateExtendedShifts());
 
   APP.data = {
     TODAY,

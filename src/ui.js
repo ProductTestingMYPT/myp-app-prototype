@@ -252,7 +252,7 @@
       "</strong></div>" +
       "</section>" +
       '<section class="week-carousel" data-week-strip>' +
-      '<div class="week-slide" data-week-start="' +
+      '<div class="week-slide" data-week-slide data-week-start="' +
       store.state.activeWeekStartDate +
       '">' +
       weekDays
@@ -704,7 +704,7 @@
       "Manager update: bring the new medication folder to Unit 5.",
     ];
     return (
-      '<div class="flyout-overlay" data-action="close-notifications"><aside class="side-flyout side-flyout-right" onclick="event.stopPropagation()"><div class="flyout-header"><h2 class="overlay-title">Notifications</h2><button class="ghost-button icon-only-button" data-action="close-notifications" aria-label="Close notifications">' +
+      '<div class="flyout-overlay"><button class="slideout-backdrop" data-action="close-notifications" aria-label="Close notifications"></button><aside class="side-flyout side-flyout-right"><div class="flyout-header"><h2 class="overlay-title">Notifications</h2><button class="ghost-button icon-only-button" data-action="close-notifications" aria-label="Close notifications">' +
       renderIcon("x") +
       '</button></div><div class="notification-list">' +
       items
@@ -734,7 +734,7 @@
     const secondaryLinks = [["settings", "Settings"]];
 
     return (
-      '<div class="menu-overlay" data-action="close-menu"><aside class="menu-panel" onclick="event.stopPropagation()"><div class="flyout-header"><h2 class="overlay-title">Menu</h2><button class="ghost-button icon-only-button" data-action="close-menu" aria-label="Close menu">' +
+      '<div class="menu-overlay"><button class="slideout-backdrop" data-action="close-menu" aria-label="Close menu"></button><aside class="menu-panel"><div class="flyout-header"><h2 class="overlay-title">Menu</h2><button class="ghost-button icon-only-button" data-action="close-menu" aria-label="Close menu">' +
       renderIcon("x") +
       '</button></div><div class="menu-group">' +
       primaryLinks

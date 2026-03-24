@@ -244,11 +244,8 @@ button {
 .week-carousel {
   display: flex;
   gap: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-snap-type: x mandatory;
+  overflow: hidden;
   touch-action: pan-y;
-  -webkit-overflow-scrolling: touch;
   margin: 0 0 0.85rem;
   padding: 0 0 0.15rem;
 }
@@ -258,12 +255,47 @@ button {
 }
 
 .week-slide {
-  flex: 0 0 100%;
-  width: 100%;
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 0.25rem;
-  scroll-snap-align: center;
+  width: 100%;
+  will-change: transform, opacity;
+}
+
+.week-slide-enter {
+  animation-duration: 180ms;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+.week-slide-enter-next {
+  animation-name: week-slide-in-next;
+}
+
+.week-slide-enter-previous {
+  animation-name: week-slide-in-previous;
+}
+
+@keyframes week-slide-in-next {
+  from {
+    opacity: 0.6;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes week-slide-in-previous {
+  from {
+    opacity: 0.6;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .week-day {
@@ -668,12 +700,13 @@ button {
 .menu-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.32);
   display: flex;
   z-index: 40;
 }
 
 .menu-panel {
+  position: relative;
+  z-index: 1;
   width: min(320px, 85vw);
   height: 100%;
   overflow: auto;
@@ -690,13 +723,14 @@ button {
 .flyout-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.32);
   display: flex;
   justify-content: flex-end;
   z-index: 41;
 }
 
 .side-flyout {
+  position: relative;
+  z-index: 1;
   width: min(360px, 92vw);
   height: 100%;
   overflow: auto;
@@ -707,6 +741,15 @@ button {
 
 .side-flyout-right {
   border-left: 1px solid var(--line);
+}
+
+.slideout-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: rgba(15, 23, 42, 0.32);
+  border-radius: 0;
 }
 
 .flyout-header {

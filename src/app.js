@@ -6,12 +6,25 @@
   const root = document.getElementById("app");
   let weekGesture = null;
   let suppressNextDayTap = false;
+  let pendingWeekAnimation = "";
 
   function render() {
     store.recomputeAllStatuses();
     root.innerHTML = ui.renderApp();
     bindWeekSwipe();
+    applyWeekAnimation();
     updateLiveUi();
+  }
+
+  function applyWeekAnimation() {
+    const slide = document.querySelector("[data-week-slide]");
+    if (!slide || !pendingWeekAnimation) return;
+    const animationDirection = pendingWeekAnimation;
+    slide.classList.add("week-slide-enter", "week-slide-enter-" + animationDirection);
+    window.setTimeout(function () {
+      slide.classList.remove("week-slide-enter", "week-slide-enter-" + animationDirection);
+    }, 220);
+    pendingWeekAnimation = "";
   }
 
   function bindWeekSwipe() {
@@ -41,6 +54,7 @@
         const direction = deltaX < 0 ? 7 : -7;
         weekGesture.handled = true;
         suppressNextDayTap = true;
+        pendingWeekAnimation = deltaX < 0 ? "next" : "previous";
         store.setActiveWeekStartDate(
           ui.plusDays(store.state.activeWeekStartDate, direction)
         );
@@ -54,6 +68,11 @@
       window.setTimeout(function () {
         suppressNextDayTap = false;
       }, 0);
+    });
+
+    strip.addEventListener("touchcancel", function () {
+      weekGesture = null;
+      suppressNextDayTap = false;
     });
   }
 
