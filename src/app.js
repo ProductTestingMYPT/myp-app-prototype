@@ -173,6 +173,16 @@
       );
     }
     if (action === "save-allowance") store.saveAllowanceDraft();
+    if (action === "open-add-disturbance") {
+      store.openDisturbanceOverlay(target.getAttribute("data-shift-id"));
+    }
+    if (action === "edit-disturbance") {
+      store.openDisturbanceOverlay(
+        target.getAttribute("data-shift-id"),
+        target.getAttribute("data-disturbance-id")
+      );
+    }
+    if (action === "save-disturbance") store.saveDisturbanceDraft();
     if (action === "close-overlay") store.closeActiveOverlay();
     if (action === "placeholder") window.alert("Placeholder action for prototype only.");
   }
@@ -239,6 +249,9 @@
 
     if (action === "allowance-quantity-input") {
       store.updateAllowanceDraft("quantity", target.value);
+    }
+    if (action === "disturbance-draft-input") {
+      store.updateDisturbanceDraft(target.getAttribute("data-field"), target.value);
     }
   }
 

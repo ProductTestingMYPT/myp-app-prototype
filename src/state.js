@@ -398,6 +398,33 @@
     notify();
   }
 
+  function openDisturbanceOverlay(shiftId, disturbanceId) {
+    const shift = getShiftById(shiftId);
+    if (!shift || shift.shiftType !== "sleepover") return;
+    const existing = (shift.sleepover.disturbances || []).find(function (entry) {
+      return entry.id === disturbanceId;
+    });
+    state.activeOverlay = {
+      type: "sleep-disturbance",
+      shiftId,
+      disturbanceId: disturbanceId || null,
+      draft: existing
+        ? {
+            startDate: existing.startDate || shift.date,
+            startTime: existing.startTime || "",
+            durationMinutes: existing.durationMinutes != null ? String(existing.durationMinutes) : "",
+            endTime: existing.endTime || "",
+          }
+        : {
+            startDate: shift.date,
+            startTime: "",
+            durationMinutes: "",
+            endTime: "",
+          },
+    };
+    notify();
+  }
+
   function closeActiveOverlay() {
     state.activeOverlay = null;
     notify();
@@ -485,6 +512,11 @@
     state.activeOverlay.draft[field] = value;
   }
 
+  function updateDisturbanceDraft(field, value) {
+    if (!state.activeOverlay || state.activeOverlay.type !== "sleep-disturbance") return;
+    state.activeOverlay.draft[field] = value;
+  }
+
   function setAllowanceType(typeId) {
     if (!state.activeOverlay || state.activeOverlay.type !== "allowance") return;
     const option = data.ALLOWANCE_OPTIONS.find(function (entry) {
@@ -528,6 +560,36 @@
     notify();
   }
 
+  function saveDisturbanceDraft() {
+    if (!state.activeOverlay || state.activeOverlay.type !== "sleep-disturbance") return;
+    const overlay = state.activeOverlay;
+    const draft = overlay.draft;
+    updateShift(
+      overlay.shiftId,
+      function (shift) {
+        if (!shift.sleepover) return;
+        const record = {
+          id: overlay.disturbanceId || "dist-" + Date.now(),
+          startDate: draft.startDate || shift.date,
+          startTime: draft.startTime || "",
+          durationMinutes: draft.durationMinutes === "" ? "" : Number(draft.durationMinutes),
+          endTime: draft.endTime || "",
+        };
+        const index = shift.sleepover.disturbances.findIndex(function (entry) {
+          return entry.id === overlay.disturbanceId;
+        });
+        if (index >= 0) {
+          shift.sleepover.disturbances[index] = record;
+        } else {
+          shift.sleepover.disturbances.push(record);
+        }
+      },
+      false
+    );
+    state.activeOverlay = null;
+    notify();
+  }
+
   initialize();
 
   APP.store = {
@@ -561,6 +623,7 @@
     openClientNoteOverlay,
     openGeneralNotesOverlay,
     openAllowanceOverlay,
+    openDisturbanceOverlay,
     closeActiveOverlay,
     updateClientAttendance,
     updateClientAbsenceReason,
@@ -572,8 +635,10 @@
     addLinkedForm,
     toggleClientInfoAccordion,
     updateAllowanceDraft,
+    updateDisturbanceDraft,
     setAllowanceType,
     saveAllowanceDraft,
+    saveDisturbanceDraft,
     recomputeAllStatuses: function () {
       const now = new Date();
       state.shifts.forEach(function (shift) {

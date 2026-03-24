@@ -45,6 +45,12 @@
     return dateKey + "T" + time + ":00";
   }
 
+  function nextDateKey(dateKey) {
+    const date = new Date(dateKey + "T00:00:00");
+    date.setDate(date.getDate() + 1);
+    return formatDateKey(date);
+  }
+
   function participant(id, name, flags, program, isNdis, contacts, representative, emergencyContacts) {
     return {
       id,
@@ -147,6 +153,9 @@
           ? {
               room: "Staff room B",
               handover: "Confirm medication lockbox and overnight call protocol.",
+              paidSupportMinutes: seed.paidSupportMinutes || 360,
+              eveningSupport: seed.eveningSupport || "6:00pm - 10:00pm",
+              morningSupport: seed.morningSupport || "6:00am - 8:00am",
               disturbances: seed.disturbances || [],
             }
           : null,
@@ -212,7 +221,7 @@
     buildShift({
       id: "shift-1003",
       dayOffset: 1,
-      startTime: "20:00",
+      startTime: "18:00",
       endTime: "08:00",
       rosterName: "Sleepover SIL",
       location: "Unit 12, Indooroopilly",
@@ -226,9 +235,7 @@
         { id: "task-6", title: "Complete overnight environment check", done: false },
         { id: "task-7", title: "Prepare morning handover note", done: false },
       ],
-      disturbances: [
-        { id: "dist-1", time: "01:40", note: "Mia requested reassurance after noise outside." },
-      ],
+      disturbances: [],
       documents: ["Sleepover procedure", "Emergency evacuation plan"],
       initialStatus: "not_started",
     }),
@@ -291,8 +298,8 @@
     buildShift({
       id: "shift-1007",
       dayOffset: -1,
-      startTime: "10:00",
-      endTime: "16:00",
+      startTime: "16:30",
+      endTime: "20:30",
       rosterName: "Skill building session",
       location: "Stafford community hub",
       description:
@@ -306,8 +313,8 @@
       clientNotes: "Noah independently used the checkout with verbal prompts only.",
       generalNotes: "Receipts filed in participant folder.",
       checkedInAt: new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString(),
-      checkedOutAt: new Date(Date.now() - 18 * 60 * 60 * 1000).toISOString(),
-      actualWorkedMinutes: 355,
+      checkedOutAt: new Date(Date.now() - 16 * 60 * 60 * 1000).toISOString(),
+      actualWorkedMinutes: 240,
       initialStatus: "completed_recent",
       allowances: [{ id: "allow-1", type: "Meal", amount: 18.5, notes: "Worker meal with participant" }],
       transportLogs: [{ id: "trip-2", mode: "manual", from: "Hub", to: "Stafford", km: 9, notes: "Round trip recorded" }],
@@ -380,6 +387,17 @@
       documents: ["Daily support notes"],
     },
     {
+      rosterName: "Short morning support",
+      startTime: "06:00",
+      endTime: "10:00",
+      location: "Inner north SIL homes",
+      description: "Short morning block covering wake-up routine, breakfast, and handover updates.",
+      participantIds: ["p1", "p4"],
+      tags: ["personal care", "handover"],
+      assets: ["House phone", "Keys"],
+      documents: ["Morning routine checklist"],
+    },
+    {
       rosterName: "Community access afternoon",
       startTime: "13:00",
       endTime: "19:00",
@@ -389,6 +407,17 @@
       tags: ["community access", "transport"],
       assets: ["Van access card"],
       documents: ["Community access plan"],
+    },
+    {
+      rosterName: "Capacity building visit",
+      startTime: "10:00",
+      endTime: "12:00",
+      location: "Northside community venues",
+      description: "Short goal-focused visit for shopping practice, planning, or independent travel skills.",
+      participantIds: ["p2"],
+      tags: ["capacity building", "community access"],
+      assets: ["Goal tracker"],
+      documents: ["Goal progress worksheet"],
     },
     {
       rosterName: "Respite evening support",
@@ -412,17 +441,109 @@
       assets: ["Referral paperwork"],
       documents: ["Appointment referral"],
     },
+    {
+      rosterName: "Long day support",
+      startTime: "08:00",
+      endTime: "18:00",
+      breakDuration: 30,
+      location: "South Brisbane and home-based supports",
+      description: "Long day combining personal care, community access, meal support, and end-of-day notes.",
+      participantIds: ["p1", "p5"],
+      tags: ["community access", "meal support"],
+      assets: ["Vehicle logbook", "Medication chart"],
+      documents: ["Daily support summary"],
+    },
+    {
+      rosterName: "Evening community support",
+      startTime: "16:00",
+      endTime: "20:00",
+      location: "Brisbane north community locations",
+      description: "Afternoon and evening support for errands, dinner prep, and return-home routine.",
+      participantIds: ["p2", "p5"],
+      tags: ["community access", "meal support"],
+      assets: ["Van access card"],
+      documents: ["Community outing checklist"],
+    },
   ];
 
-  function shiftSeedForStatus(status, dateKey, startTime, endTime, breakDuration) {
+  const singleShiftPatterns = [
+    [{ templateIndex: 0, startTime: "07:00", endTime: "15:00", breakDuration: 30 }],
+    [{ templateIndex: 5, startTime: "09:00", endTime: "13:00", breakDuration: 0 }],
+    [{ templateIndex: 4, startTime: "15:00", endTime: "21:00", breakDuration: 0 }],
+    [{ templateIndex: 6, startTime: "08:00", endTime: "18:00", breakDuration: 30 }],
+    [{ templateIndex: 7, startTime: "16:00", endTime: "20:00", breakDuration: 0 }],
+    [{ templateIndex: 3, startTime: "10:00", endTime: "12:00", breakDuration: 0 }],
+  ];
+
+  const doubleShiftPatterns = [
+    [
+      { templateIndex: 1, startTime: "06:00", endTime: "10:00", breakDuration: 0 },
+      { templateIndex: 2, startTime: "15:00", endTime: "21:00", breakDuration: 0 },
+    ],
+    [
+      { templateIndex: 0, startTime: "07:00", endTime: "11:00", breakDuration: 0 },
+      { templateIndex: 7, startTime: "16:00", endTime: "20:00", breakDuration: 0 },
+    ],
+    [
+      { templateIndex: 5, startTime: "09:00", endTime: "13:00", breakDuration: 0 },
+      { templateIndex: 4, startTime: "17:00", endTime: "21:00", breakDuration: 0 },
+    ],
+  ];
+
+  function getSleepoverDisturbances(status, dateKey, seedId) {
+    if (status === "not_started") return [];
+    if (status === "missing_check_out" || status === "in_progress") {
+      return [
+        {
+          id: "dist-" + seedId + "-a",
+          startDate: nextDateKey(dateKey),
+          startTime: "03:10",
+          endTime: "",
+          durationMinutes: "",
+        },
+      ];
+    }
+
+    if (seedId % 2 === 0) return [];
+
+    return [
+      {
+        id: "dist-" + seedId + "-a",
+        startDate: nextDateKey(dateKey),
+        startTime: "00:45",
+        endTime: "01:05",
+        durationMinutes: 20,
+      },
+      {
+        id: "dist-" + seedId + "-b",
+        startDate: nextDateKey(dateKey),
+        startTime: "04:20",
+        endTime: "04:35",
+        durationMinutes: 15,
+      },
+    ];
+  }
+
+  function shiftSeedForStatus(
+    status,
+    dateKey,
+    startTime,
+    endTime,
+    breakDuration,
+    actualWorkedMinutesOverride
+  ) {
     const startIso = isoDateTime(dateKey, startTime);
-    const endIso = isoDateTime(dateKey, endTime);
-    const actualWorkedMinutes = Math.max(
-      0,
-      (Number(endTime.slice(0, 2)) * 60 + Number(endTime.slice(3, 5)) + (endTime < startTime ? 24 * 60 : 0)) -
-        (Number(startTime.slice(0, 2)) * 60 + Number(startTime.slice(3, 5))) -
-        (breakDuration || 0)
-    );
+    const overnight = endTime < startTime;
+    const endIso = isoDateTime(overnight ? nextDateKey(dateKey) : dateKey, endTime);
+    const actualWorkedMinutes =
+      actualWorkedMinutesOverride != null
+        ? actualWorkedMinutesOverride
+        : Math.max(
+            0,
+            (Number(endTime.slice(0, 2)) * 60 + Number(endTime.slice(3, 5)) + (overnight ? 24 * 60 : 0)) -
+              (Number(startTime.slice(0, 2)) * 60 + Number(startTime.slice(3, 5))) -
+              (breakDuration || 0)
+          );
 
     if (status === "approved" || status === "completed" || status === "rejected") {
       return {
@@ -467,14 +588,49 @@
         const slotCount = (weekOffset + dayIndex + 14) % 4 === 0 ? 0 : (weekOffset + dayIndex) % 3 === 0 ? 2 : 1;
         if (slotCount === 0) continue;
 
-        for (let slot = 0; slot < slotCount; slot += 1) {
-          const template = rosterTemplates[(dayIndex + slot + weekOffset + 8) % rosterTemplates.length];
-          const dayDate = addDays(weekStart, dayIndex);
-          const dateKey = formatDateKey(dayDate);
-          const shiftType =
-            dayIndex === 4 && slot === 0 && (weekOffset === -2 || weekOffset === 1 || weekOffset === 4)
-              ? "sleepover"
-              : "standard";
+        const dayDate = addDays(weekStart, dayIndex);
+        const dateKey = formatDateKey(dayDate);
+        const isSleepoverDay =
+          dayIndex === 4 && (weekOffset === -2 || weekOffset === 1 || weekOffset === 4);
+        const pattern = isSleepoverDay
+          ? [
+              {
+                shiftType: "sleepover",
+                rosterName: "Sleepover SIL",
+                startTime: "18:00",
+                endTime: "08:00",
+                breakDuration: 0,
+                location: "Unit 12, Indooroopilly",
+                description:
+                  "Evening active support, overnight sleepover, and morning handover in the SIL house.",
+                participantIds: ["p1", "p3"],
+                tags: ["sleepover", "handover"],
+                assets: ["Sleepover checklist"],
+                documents: ["Sleepover procedure"],
+                paidSupportMinutes: 360,
+                eveningSupport: "6:00pm - 10:00pm",
+                morningSupport: "6:00am - 8:00am",
+              },
+            ]
+          : (slotCount === 2
+              ? doubleShiftPatterns[(dayIndex + weekOffset + 12) % doubleShiftPatterns.length]
+              : singleShiftPatterns[(dayIndex + weekOffset + 12) % singleShiftPatterns.length]
+            ).map(function (entry) {
+              const template = rosterTemplates[entry.templateIndex];
+              return Object.assign({}, entry, template, {
+                shiftType: "standard",
+                rosterName: template.rosterName,
+                location: template.location,
+                description: template.description,
+                participantIds: template.participantIds,
+                tags: template.tags,
+                assets: template.assets,
+                documents: template.documents,
+              });
+            });
+
+        for (let slot = 0; slot < pattern.length; slot += 1) {
+          const slotTemplate = pattern[slot];
           const status =
             weekOffset < 0
               ? ["completed", "approved", "rejected"][(dayIndex + slot + 6) % 3]
@@ -483,38 +639,47 @@
                 : dayDate < TODAY
                   ? ["completed", "approved"][(dayIndex + slot) % 2]
                   : "not_started";
-          const rosterName =
-            shiftType === "sleepover" ? "Sleepover SIL" : template.rosterName;
+          const rosterName = slotTemplate.rosterName;
 
           if (existingDates.has(dateKey + "|" + rosterName)) continue;
 
           const baseSeed = {
             id: "shift-" + idCounter++,
             date: dateKey,
-            startTime: shiftType === "sleepover" ? "20:00" : template.startTime,
-            endTime: shiftType === "sleepover" ? "08:00" : template.endTime,
-            breakDuration: template.breakDuration || 0,
+            startTime: slotTemplate.startTime,
+            endTime: slotTemplate.endTime,
+            breakDuration: slotTemplate.breakDuration || 0,
             rosterName: rosterName,
-            location: template.location,
-            description: template.description,
-            participantIds: template.participantIds,
-            shiftType: shiftType,
-            tags: shiftType === "sleepover" ? ["sleepover", "handover"] : template.tags,
-            assets: shiftType === "sleepover" ? ["Sleepover checklist"] : template.assets,
-            documents: shiftType === "sleepover" ? ["Sleepover procedure"] : template.documents,
+            location: slotTemplate.location,
+            description: slotTemplate.description,
+            participantIds: slotTemplate.participantIds,
+            shiftType: slotTemplate.shiftType,
+            tags: slotTemplate.tags,
+            assets: slotTemplate.assets,
+            documents: slotTemplate.documents,
             tasks: [
               { id: "task-" + idCounter + "-a", title: "Complete shift handover", done: status !== "not_started" },
               { id: "task-" + idCounter + "-b", title: "Update progress notes", done: status !== "not_started" },
             ],
           };
 
-          if (shiftType === "sleepover") {
-            baseSeed.disturbances = [];
+          if (slotTemplate.shiftType === "sleepover") {
+            baseSeed.paidSupportMinutes = slotTemplate.paidSupportMinutes;
+            baseSeed.eveningSupport = slotTemplate.eveningSupport;
+            baseSeed.morningSupport = slotTemplate.morningSupport;
+            baseSeed.disturbances = getSleepoverDisturbances(status, dateKey, idCounter);
           }
 
           Object.assign(
             baseSeed,
-            shiftSeedForStatus(status, dateKey, baseSeed.startTime, baseSeed.endTime, baseSeed.breakDuration)
+            shiftSeedForStatus(
+              status,
+              dateKey,
+              baseSeed.startTime,
+              baseSeed.endTime,
+              baseSeed.breakDuration,
+              slotTemplate.shiftType === "sleepover" ? slotTemplate.paidSupportMinutes : null
+            )
           );
 
           generated.push(buildShift(baseSeed));

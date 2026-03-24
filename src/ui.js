@@ -41,6 +41,15 @@
     return hours + "h " + mins + "m";
   }
 
+  function formatDurationMinutes(minutes) {
+    if (minutes === "" || minutes == null || Number.isNaN(Number(minutes))) return "Not recorded";
+    const total = Number(minutes);
+    if (total < 60) return total + " mins";
+    const hours = Math.floor(total / 60);
+    const mins = total % 60;
+    return mins ? hours + "h " + mins + "m" : hours + " hrs";
+  }
+
   function formatDurationFrom(isoString) {
     if (!isoString) return "00:00:00";
     const ms = Math.max(0, Date.now() - new Date(isoString).getTime());
@@ -96,6 +105,58 @@
 
   function getShiftCountForDate(dateKeyValue) {
     return getShiftsForDate(dateKeyValue).length;
+  }
+
+  function formatShiftTimeWindow(shift) {
+    return formatTime(shift.startTime) + " - " + formatTime(shift.endTime);
+  }
+
+  function formatShiftWorkedLabel(shift) {
+    if (shift.shiftType === "sleepover") {
+      return formatDurationMinutes(shift.sleepover.paidSupportMinutes) + " + sleepover";
+    }
+    return formatMinutes(shift.workflow.actualWorkedMinutes);
+  }
+
+  function renderShiftTimeContent(shift) {
+    if (shift.shiftType !== "sleepover") {
+      return (
+        '<div class="field"><span class="field-label">Time</span><span>' +
+        formatShiftTimeWindow(shift) +
+        "</span></div>"
+      );
+    }
+
+    return (
+      '<div class="field"><span class="field-label">Time</span><span>' +
+      formatShiftTimeWindow(shift) +
+      '</span><div class="subtle">' +
+      escapeHtml(formatDurationMinutes(shift.sleepover.paidSupportMinutes) + " + sleepover") +
+      "</div></div>"
+    );
+  }
+
+  function renderSleepoverBadge(shift) {
+    if (shift.shiftType !== "sleepover") return "";
+    return '<span class="tag">Sleepover</span>';
+  }
+
+  function formatDisturbanceDate(dateKeyValue) {
+    if (!dateKeyValue) return "Date not recorded";
+    return formatDate(dateKeyValue, { day: "numeric", month: "short", year: "numeric" });
+  }
+
+  function renderDisturbanceSummary(item) {
+    const timing = [];
+    if (item.startTime) timing.push("Start " + formatTime(item.startTime));
+    if (item.endTime) timing.push("End " + formatTime(item.endTime));
+    if (item.durationMinutes !== "" && item.durationMinutes != null) {
+      timing.push("Duration " + formatDurationMinutes(item.durationMinutes));
+    }
+    if (!item.endTime || item.durationMinutes === "" || item.durationMinutes == null) {
+      timing.push("Incomplete record");
+    }
+    return timing.join(" | ");
   }
 
   function renderIcon(name) {
@@ -163,12 +224,10 @@
     const finishedContent = isCompletedStatus(shift.status)
       ? '<div class="metric-grid">' +
         '<div class="metric-item"><div class="field-label">Planned</div><div>' +
-        formatTime(shift.startTime) +
-        " - " +
-        formatTime(shift.endTime) +
+        formatShiftTimeWindow(shift) +
         "</div></div>" +
         '<div class="metric-item"><div class="field-label">Actual worked</div><div>' +
-        formatMinutes(shift.workflow.actualWorkedMinutes) +
+        escapeHtml(formatShiftWorkedLabel(shift)) +
         "</div></div>" +
         '<div class="metric-item"><div class="field-label">Final status</div><div>' +
         escapeHtml(data.STATUS_META[shift.status].label) +
@@ -178,11 +237,7 @@
         '<div class="field"><span class="field-label">Date</span><span>' +
         formatDate(shift.date, { weekday: "short", day: "numeric", month: "short" }) +
         "</span></div>" +
-        '<div class="field"><span class="field-label">Time</span><span>' +
-        formatTime(shift.startTime) +
-        " - " +
-        formatTime(shift.endTime) +
-        "</span></div>" +
+        renderShiftTimeContent(shift) +
         "</div>";
 
     return (
@@ -197,6 +252,9 @@
       "</h3>" +
       renderStatusBadge(shift.status) +
       "</div>" +
+      (shift.shiftType === "sleepover"
+        ? '<div class="tag-list" style="margin-top:0.35rem">' + renderSleepoverBadge(shift) + "</div>"
+        : "") +
       '<p class="subtle">' +
       escapeHtml(shift.location) +
       "</p>" +
@@ -342,10 +400,13 @@
       formatDate(shift.date, { weekday: "long", day: "numeric", month: "long", year: "numeric" }) +
       "</span></div>" +
       '<div class="field"><span class="field-label">Time</span><span>' +
-      formatTime(shift.startTime) +
-      " - " +
-      formatTime(shift.endTime) +
+      formatShiftTimeWindow(shift) +
       "</span></div>" +
+      (shift.shiftType === "sleepover"
+        ? '<div class="field"><span class="field-label">Paid support</span><span>' +
+          escapeHtml(formatDurationMinutes(shift.sleepover.paidSupportMinutes) + " + sleepover") +
+          "</span></div>"
+        : "") +
       '<div class="field"><span class="field-label">Break</span><span>' +
       (shift.breakDuration ? shift.breakDuration + " mins" : "None") +
       "</span></div>" +
@@ -355,6 +416,11 @@
       '<div class="field"><span class="field-label">Roster</span><span>' +
       escapeHtml(shift.rosterName) +
       "</span></div>" +
+      (shift.shiftType === "sleepover"
+        ? '<div class="field"><span class="field-label">Active support windows</span><span>' +
+          escapeHtml(shift.sleepover.eveningSupport + " and " + shift.sleepover.morningSupport) +
+          "</span></div>"
+        : "") +
       '<div class="field field-span-full"><span class="field-label">Participants</span><span class="simple-name-list">' +
       shift.participants
         .map(function (participant) {
@@ -377,12 +443,10 @@
       (isCompletedStatus(shift.status)
         ? '<section class="section-block section-block-tight"><h3 class="section-title">Finished shift summary</h3><div class="metric-grid">' +
           '<div class="metric-item"><div class="field-label">Planned</div><div>' +
-          formatTime(shift.startTime) +
-          " - " +
-          formatTime(shift.endTime) +
+          formatShiftTimeWindow(shift) +
           "</div></div>" +
           '<div class="metric-item"><div class="field-label">Actual worked</div><div>' +
-          formatMinutes(shift.workflow.actualWorkedMinutes) +
+          escapeHtml(formatShiftWorkedLabel(shift)) +
           "</div></div>" +
           '<div class="metric-item"><div class="field-label">Final status</div><div>' +
           escapeHtml(data.STATUS_META[shift.status].label) +
@@ -577,19 +641,34 @@
       "</span></div>" +
       '<div class="field"><span class="field-label">Handover</span><span>' +
       escapeHtml(shift.sleepover.handover) +
+      "</span></div>" +
+      '<div class="field"><span class="field-label">Active support</span><span>' +
+      escapeHtml(shift.sleepover.eveningSupport + " and " + shift.sleepover.morningSupport) +
+      '</span></div><div class="field"><span class="field-label">Paid support</span><span>' +
+      escapeHtml(formatDurationMinutes(shift.sleepover.paidSupportMinutes) + " + sleepover") +
       "</span></div></div></section>" +
-      '<section class="section-block section-block-tight"><h3 class="section-title">Disturbances</h3><div class="list-stack">' +
-      shift.sleepover.disturbances
-        .map(function (item) {
-          return (
-            '<div class="list-item compact-item"><strong>' +
-            escapeHtml(item.time) +
-            "</strong><div>" +
-            escapeHtml(item.note) +
-            "</div></div>"
-          );
-        })
-        .join("") +
+      '<section class="section-block section-block-tight"><div class="section-heading-row"><div><h3 class="section-title">Disturbances log</h3><div class="subtle">Add the timing here. Add details of the disturbance in Notes.</div></div><button class="ghost-button button-compact" data-action="open-add-disturbance" data-shift-id="' +
+      shift.id +
+      '">Log sleep disturbance</button></div><div class="list-stack">' +
+      (shift.sleepover.disturbances.length
+        ? shift.sleepover.disturbances
+            .map(function (item) {
+              return (
+                '<button class="list-item-button" data-action="edit-disturbance" data-shift-id="' +
+                shift.id +
+                '" data-disturbance-id="' +
+                item.id +
+                '"><div class="list-item-button-top"><strong>' +
+                escapeHtml(formatDisturbanceDate(item.startDate)) +
+                '</strong><span>' +
+                escapeHtml(!item.endTime || item.durationMinutes === "" || item.durationMinutes == null ? "Incomplete" : "Complete") +
+                '</span></div><div class="subtle">' +
+                escapeHtml(renderDisturbanceSummary(item)) +
+                '</div><div class="subtle">Tap to edit record</div></button>'
+              );
+            })
+            .join("")
+        : '<div class="empty-state"><span class="subtle">No sleep disturbances recorded for this shift.</span></div>') +
       "</div></section>"
     );
   }
@@ -607,7 +686,7 @@
       escapeHtml(formatDateTime(shift.workflow.checkedOutAt)) +
       "</div></div>" +
       '<div class="metric-item"><div class="field-label">Worked time</div><div>' +
-      escapeHtml(formatMinutes(shift.workflow.actualWorkedMinutes)) +
+      escapeHtml(formatShiftWorkedLabel(shift)) +
       "</div></div>" +
       '<div class="metric-item"><div class="field-label">Tasks done</div><div>' +
       shift.tasks.filter(function (task) {
@@ -1020,6 +1099,23 @@
     );
   }
 
+  function renderDisturbanceOverlay(overlay) {
+    return (
+      '<section class="overlay-sheet"><div class="overlay-sheet-header"><div><div class="overlay-kicker">Sleepover</div><h2 class="overlay-title">' +
+      (overlay.disturbanceId ? "Edit sleep disturbance" : "Log sleep disturbance") +
+      '</h2></div><button class="ghost-button button-compact" data-action="close-overlay">Close</button></div>' +
+      '<div class="overlay-sheet-body"><div class="subtle" style="margin-bottom:0.9rem">Add the timing here. Add details of the disturbance in Notes.</div><div class="field"><span class="field-label">Start date</span><input class="text-input" type="date" value="' +
+      escapeHtml(overlay.draft.startDate || "") +
+      '" data-action="disturbance-draft-input" data-field="startDate" /></div><div class="field"><span class="field-label">Start of disturbance</span><input class="text-input" type="time" value="' +
+      escapeHtml(overlay.draft.startTime || "") +
+      '" data-action="disturbance-draft-input" data-field="startTime" /></div><div class="field"><span class="field-label">Duration</span><input class="text-input" type="number" min="0" step="5" value="' +
+      escapeHtml(overlay.draft.durationMinutes || "") +
+      '" data-action="disturbance-draft-input" data-field="durationMinutes" /><div class="subtle">Leave blank if the disturbance is still in progress.</div></div><div class="field"><span class="field-label">End of disturbance</span><input class="text-input" type="time" value="' +
+      escapeHtml(overlay.draft.endTime || "") +
+      '" data-action="disturbance-draft-input" data-field="endTime" /></div><div class="actions-row"><button class="ghost-button" data-action="close-overlay">Cancel</button><button class="solid-button" data-action="save-disturbance">Save</button></div></div></section>'
+    );
+  }
+
   function renderActiveOverlay() {
     const overlay = store.state.activeOverlay;
     if (!overlay) return "";
@@ -1028,6 +1124,7 @@
     if (overlay.type === "client-note") return renderClientNoteOverlay(overlay);
     if (overlay.type === "general-notes") return renderGeneralNotesOverlay(overlay);
     if (overlay.type === "allowance") return renderAllowanceOverlay(overlay);
+    if (overlay.type === "sleep-disturbance") return renderDisturbanceOverlay(overlay);
     return "";
   }
 
