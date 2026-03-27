@@ -31,4 +31,4 @@ Each shift includes:
 
 ## Running
 
-Open [index.html](/Users/bechumphrey/Documents/New project 2/index.html) in a browser.
+Open `index.html` in your browser.
