@@ -190,6 +190,7 @@ button {
 .page-header {
   grid-template-columns: 1fr auto;
   align-items: center;
+  margin-bottom: 6px;
 }
 
 .page-title {

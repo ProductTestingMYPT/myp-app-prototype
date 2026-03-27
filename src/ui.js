@@ -286,9 +286,6 @@
       "</h3>" +
       renderStatusBadge(shift.status) +
       "</div>" +
-      (shift.shiftType === "sleepover"
-        ? '<div class="tag-list" style="margin-top:0.35rem">' + renderSleepoverBadge(shift) + "</div>"
-        : "") +
       '<p class="subtle">' +
       escapeHtml(shift.location) +
       "</p>" +

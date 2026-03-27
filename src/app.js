@@ -12,6 +12,7 @@
   let toastTimerId = null;
 
   function render() {
+    const focusedInputState = captureFocusedInputState();
     const existingTabScroll = document.querySelector("[data-tab-scroll]");
     if (existingTabScroll) {
       detailTabScrollLeft = existingTabScroll.scrollLeft;
@@ -22,9 +23,53 @@
     bindDetailTabScroll();
     applyWeekAnimation();
     restoreDetailTabScroll();
+    restoreFocusedInputState(focusedInputState);
     syncLoadingFlow();
     syncToast();
     updateLiveUi();
+  }
+
+  function captureFocusedInputState() {
+    const activeElement = document.activeElement;
+    if (!activeElement || !root.contains(activeElement)) return null;
+    if (!["INPUT", "TEXTAREA", "SELECT"].includes(activeElement.tagName)) return null;
+
+    return {
+      id: activeElement.id || "",
+      action: activeElement.getAttribute("data-action") || "",
+      field: activeElement.getAttribute("data-field") || "",
+      shiftId: activeElement.getAttribute("data-shift-id") || "",
+      participantId: activeElement.getAttribute("data-participant-id") || "",
+      selectionStart:
+        typeof activeElement.selectionStart === "number" ? activeElement.selectionStart : null,
+      selectionEnd: typeof activeElement.selectionEnd === "number" ? activeElement.selectionEnd : null,
+    };
+  }
+
+  function restoreFocusedInputState(stateSnapshot) {
+    if (!stateSnapshot) return;
+
+    let selector = "";
+    if (stateSnapshot.id) {
+      selector = "#" + CSS.escape(stateSnapshot.id);
+    } else if (stateSnapshot.action) {
+      selector = '[data-action="' + stateSnapshot.action + '"]';
+      if (stateSnapshot.field) selector += '[data-field="' + stateSnapshot.field + '"]';
+      if (stateSnapshot.shiftId) selector += '[data-shift-id="' + stateSnapshot.shiftId + '"]';
+      if (stateSnapshot.participantId) selector += '[data-participant-id="' + stateSnapshot.participantId + '"]';
+    }
+
+    if (!selector) return;
+    const element = document.querySelector(selector);
+    if (!element || typeof element.focus !== "function") return;
+    element.focus({ preventScroll: true });
+    if (
+      typeof element.setSelectionRange === "function" &&
+      stateSnapshot.selectionStart != null &&
+      stateSnapshot.selectionEnd != null
+    ) {
+      element.setSelectionRange(stateSnapshot.selectionStart, stateSnapshot.selectionEnd);
+    }
   }
 
   function applyWeekAnimation() {

@@ -172,6 +172,128 @@
     return shift;
   }
 
+  function getTaskTemplatesForShift(shiftLike) {
+    if (shiftLike.shiftType === "sleepover") {
+      return [
+        "Complete evening medication prompt",
+        "Check bedroom and overnight environment",
+        "Prepare overnight handover note",
+        "Record sleep disturbance events",
+        "Complete morning medication observation",
+        "Confirm lock-up and alarm check",
+      ];
+    }
+
+    const rosterName = (shiftLike.rosterName || "").toLowerCase();
+    const tags = (shiftLike.tags || []).join(" ").toLowerCase();
+
+    if (rosterName.includes("long day")) {
+      return [
+        "Review support plan before departure",
+        "Complete personal care routine",
+        "Confirm medications and supplies",
+        "Support meal preparation",
+        "Document community participation",
+        "Update transport log",
+        "Check incident follow-up items",
+        "Restock PPE and consumables",
+        "Finish end-of-day handover",
+      ];
+    }
+
+    if (rosterName.includes("clinic escort") || tags.includes("appointment")) {
+      return [
+        "Confirm appointment details",
+        "Carry referral paperwork",
+        "Record appointment outcomes",
+        "Update family or coordinator handover",
+      ];
+    }
+
+    if (rosterName.includes("house support") || tags.includes("cleaning") || tags.includes("meal prep")) {
+      return [
+        "Check fridge temperatures",
+        "Complete laundry cycle",
+        "Restock pantry basics",
+        "Tidy common areas",
+        "Prepare meal plan notes",
+        "Update house communication book",
+      ];
+    }
+
+    if (tags.includes("community access") || tags.includes("transport")) {
+      return [
+        "Confirm pickup and return timing",
+        "Check participant spending plan",
+        "Support travel transitions",
+        "Record outing highlights",
+        "Complete transport notes",
+        "File receipts or tickets",
+      ];
+    }
+
+    if (tags.includes("capacity building")) {
+      return [
+        "Review session goal",
+        "Set up activity materials",
+        "Practice planned skill task",
+        "Capture progress note",
+      ];
+    }
+
+    if (tags.includes("respite")) {
+      return [
+        "Prepare dinner support plan",
+        "Complete medication prompt",
+        "Set up evening activity",
+        "Reset kitchen and shared spaces",
+        "Finish family handover note",
+      ];
+    }
+
+    return [
+      "Review support notes",
+      "Complete routine support task",
+      "Update progress note",
+      "Finish shift handover",
+    ];
+  }
+
+  function getCompletedTaskCount(status, taskCount, seedNumber) {
+    if (status === "not_started") return 0;
+    if (status === "in_progress" || status === "missing_check_out") {
+      return Math.min(taskCount, Math.max(0, Math.floor(taskCount / 2) + (seedNumber % 2)));
+    }
+    if (status === "completed_recent" || status === "completed" || status === "approved") {
+      const mode = seedNumber % 3;
+      if (mode === 0) return taskCount;
+      if (mode === 1) return Math.max(0, taskCount - 1);
+      return Math.max(0, Math.floor(taskCount / 2));
+    }
+    if (status === "missing_check_in") {
+      return seedNumber % 2 === 0 ? taskCount : Math.max(0, Math.floor(taskCount / 2));
+    }
+    if (status === "rejected") {
+      return Math.max(0, Math.min(taskCount, Math.floor(taskCount / 2)));
+    }
+    return 0;
+  }
+
+  function buildTasksForShift(shiftLike, status, seedNumber, preferredCount) {
+    const templates = getTaskTemplatesForShift(shiftLike);
+    const maxCount = Math.min(10, templates.length);
+    const taskCount = Math.max(0, Math.min(maxCount, preferredCount != null ? preferredCount : 0));
+    const completedCount = getCompletedTaskCount(status, taskCount, seedNumber);
+
+    return templates.slice(0, taskCount).map(function (title, index) {
+      return {
+        id: "task-" + seedNumber + "-" + (index + 1),
+        title,
+        done: index < completedCount,
+      };
+    });
+  }
+
   const mockShifts = [
     buildShift({
       id: "shift-1001",
@@ -186,11 +308,16 @@
       participantIds: ["p1", "p4"],
       tags: ["personal care", "medication", "cleaning"],
       assets: ["Medication chart", "House keys"],
-      tasks: [
-        { id: "task-1", title: "Complete morning medication prompt", done: true },
-        { id: "task-2", title: "Assist with shower routine for Mia", done: false },
-        { id: "task-3", title: "Update communication book", done: false },
-      ],
+      tasks: buildTasksForShift(
+        {
+          rosterName: "Morning personal care",
+          shiftType: "standard",
+          tags: ["personal care", "medication", "cleaning"],
+        },
+        "not_started",
+        1001,
+        4
+      ),
       documents: ["Medication administration record", "Behaviour support summary"],
       checkedInAt: null,
       checkedOutAt: null,
@@ -208,10 +335,16 @@
       participantIds: ["p2", "p5"],
       tags: ["community access", "transport"],
       assets: ["Van access card"],
-      tasks: [
-        { id: "task-4", title: "Confirm return transport timing", done: true },
-        { id: "task-5", title: "Support dinner budget tracking", done: false },
-      ],
+      tasks: buildTasksForShift(
+        {
+          rosterName: "Community access afternoon",
+          shiftType: "standard",
+          tags: ["community access", "transport"],
+        },
+        "in_progress",
+        1002,
+        5
+      ),
       documents: ["Community access plan"],
       checkedInAt: new Date().toISOString(),
       initialStatus: "in_progress",
@@ -232,10 +365,16 @@
       shiftType: "sleepover",
       tags: ["sleepover", "medication", "handover"],
       assets: ["Sleepover checklist", "Incident folder"],
-      tasks: [
-        { id: "task-6", title: "Complete overnight environment check", done: false },
-        { id: "task-7", title: "Prepare morning handover note", done: false },
-      ],
+      tasks: buildTasksForShift(
+        {
+          rosterName: "Sleepover SIL",
+          shiftType: "sleepover",
+          tags: ["sleepover", "medication", "handover"],
+        },
+        "not_started",
+        1003,
+        5
+      ),
       disturbances: [],
       documents: ["Sleepover procedure", "Emergency evacuation plan"],
       initialStatus: "not_started",
@@ -250,10 +389,16 @@
       description: "Escort to allied health appointment and complete return handover.",
       participantIds: ["p5"],
       tags: ["community access", "appointment"],
-      tasks: [
-        { id: "task-8", title: "Carry referral paperwork", done: false },
-        { id: "task-9", title: "Record appointment outcomes", done: false },
-      ],
+      tasks: buildTasksForShift(
+        {
+          rosterName: "Clinic escort",
+          shiftType: "standard",
+          tags: ["community access", "appointment"],
+        },
+        "not_started",
+        1004,
+        3
+      ),
       documents: ["Appointment referral", "Transport authorisation"],
       initialStatus: "not_started",
     }),
@@ -268,10 +413,16 @@
       description: "Domestic support, meal prep, and morning routines across the house.",
       participantIds: ["p4"],
       tags: ["cleaning", "meal prep"],
-      tasks: [
-        { id: "task-10", title: "Fridge temperature check", done: true },
-        { id: "task-11", title: "Laundry cycle for Unit 5", done: true },
-      ],
+      tasks: buildTasksForShift(
+        {
+          rosterName: "House support",
+          shiftType: "standard",
+          tags: ["cleaning", "meal prep"],
+        },
+        "missing_check_in",
+        1005,
+        6
+      ),
       checkedInAt: null,
       checkedOutAt: null,
       initialStatus: "missing_check_in",
@@ -286,10 +437,16 @@
       description: "Support dinner, social activities, and evening medications.",
       participantIds: ["p3"],
       tags: ["respite", "medication"],
-      tasks: [
-        { id: "task-12", title: "Evening medication prompt", done: true },
-        { id: "task-13", title: "End-of-shift kitchen reset", done: true },
-      ],
+      tasks: buildTasksForShift(
+        {
+          rosterName: "Evening respite",
+          shiftType: "standard",
+          tags: ["respite", "medication"],
+        },
+        "missing_check_out",
+        1006,
+        5
+      ),
       clientNotes: "Ella engaged well after sensory break.",
       generalNotes: "Family requested update at pickup.",
       checkedInAt: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
@@ -307,10 +464,16 @@
         "Goal-based support focusing on budgeting, shopping, and independent travel skills.",
       participantIds: ["p2"],
       tags: ["community access", "capacity building"],
-      tasks: [
-        { id: "task-14", title: "Review weekly budgeting worksheet", done: true },
-        { id: "task-15", title: "Practice bus route planning", done: true },
-      ],
+      tasks: buildTasksForShift(
+        {
+          rosterName: "Skill building session",
+          shiftType: "standard",
+          tags: ["community access", "capacity building"],
+        },
+        "completed_recent",
+        1007,
+        4
+      ),
       clientNotes: "Noah independently used the checkout with verbal prompts only.",
       generalNotes: "Receipts filed in participant folder.",
       checkedInAt: new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString(),
@@ -330,9 +493,16 @@
       description: "Daily living support with breakfast prep and community plan review.",
       participantIds: ["p1"],
       tags: ["personal care", "planning"],
-      tasks: [
-        { id: "task-16", title: "Review weekly planner", done: true },
-      ],
+      tasks: buildTasksForShift(
+        {
+          rosterName: "Morning SIL",
+          shiftType: "standard",
+          tags: ["personal care", "planning"],
+        },
+        "completed",
+        1008,
+        3
+      ),
       checkedInAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000 + 10 * 60 * 1000).toISOString(),
       checkedOutAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000 + 8 * 60 * 60 * 1000).toISOString(),
       actualWorkedMinutes: 450,
@@ -348,7 +518,16 @@
       description: "Museum visit and dinner support with approved mileage claim.",
       participantIds: ["p5"],
       tags: ["community access", "transport"],
-      tasks: [{ id: "task-17", title: "Submit participant outing summary", done: true }],
+      tasks: buildTasksForShift(
+        {
+          rosterName: "Approved social support",
+          shiftType: "standard",
+          tags: ["community access", "transport"],
+        },
+        "approved",
+        1009,
+        2
+      ),
       checkedInAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
       checkedOutAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000 + 6 * 60 * 60 * 1000).toISOString(),
       actualWorkedMinutes: 370,
@@ -365,7 +544,16 @@
       description: "Prototype example of rejected shift for workflow testing.",
       participantIds: ["p2"],
       tags: ["admin"],
-      tasks: [{ id: "task-18", title: "Update service agreement note", done: true }],
+      tasks: buildTasksForShift(
+        {
+          rosterName: "Rejected timesheet example",
+          shiftType: "standard",
+          tags: ["admin"],
+        },
+        "rejected",
+        1010,
+        0
+      ),
       checkedInAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
       checkedOutAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000 + 2.5 * 60 * 60 * 1000).toISOString(),
       actualWorkedMinutes: 150,
@@ -658,11 +846,21 @@
             tags: slotTemplate.tags,
             assets: slotTemplate.assets,
             documents: slotTemplate.documents,
-            tasks: [
-              { id: "task-" + idCounter + "-a", title: "Complete shift handover", done: status !== "not_started" },
-              { id: "task-" + idCounter + "-b", title: "Update progress notes", done: status !== "not_started" },
-            ],
+            tasks: [],
           };
+
+          const preferredTaskCount =
+            slotTemplate.shiftType === "sleepover"
+              ? 4 + ((dayIndex + slot + weekOffset + 20) % 3)
+              : slotTemplate.rosterName.includes("Long day")
+                ? 6 + ((dayIndex + slot + weekOffset + 20) % 3)
+                : slotTemplate.rosterName.includes("Clinic escort") ||
+                    slotTemplate.rosterName.includes("Capacity building visit")
+                  ? 1 + ((dayIndex + slot + weekOffset + 20) % 3)
+                  : slotTemplate.rosterName.includes("Short morning support")
+                    ? 0 + ((dayIndex + slot + weekOffset + 20) % 4)
+                    : 2 + ((dayIndex + slot + weekOffset + 20) % 4);
+          baseSeed.tasks = buildTasksForShift(slotTemplate, status, idCounter, preferredTaskCount);
 
           if (slotTemplate.shiftType === "sleepover") {
             baseSeed.paidSupportMinutes = slotTemplate.paidSupportMinutes;
