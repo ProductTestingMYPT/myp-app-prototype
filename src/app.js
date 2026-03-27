@@ -9,6 +9,7 @@
   let pendingWeekAnimation = "";
   let detailTabScrollLeft = 0;
   let loadingTimerId = null;
+  let toastTimerId = null;
 
   function render() {
     const existingTabScroll = document.querySelector("[data-tab-scroll]");
@@ -22,6 +23,7 @@
     applyWeekAnimation();
     restoreDetailTabScroll();
     syncLoadingFlow();
+    syncToast();
     updateLiveUi();
   }
 
@@ -135,6 +137,22 @@
     }
   }
 
+  function syncToast() {
+    if (store.state.toast) {
+      if (toastTimerId) return;
+      toastTimerId = window.setTimeout(function () {
+        toastTimerId = null;
+        store.clearToast();
+      }, 2400);
+      return;
+    }
+
+    if (toastTimerId) {
+      window.clearTimeout(toastTimerId);
+      toastTimerId = null;
+    }
+  }
+
   function updateLiveUi() {
     const activeShift = store.getLiveTimerShift();
     document.querySelectorAll("[data-live-timer]").forEach(function (node) {
@@ -176,8 +194,14 @@
     }
     if (action === "jump-to-date") store.jumpToDate(target.getAttribute("data-date"));
     if (action === "open-shift") store.openShift(target.getAttribute("data-shift-id"));
+    if (action === "open-forgot-check") store.openForgotCheckOverlay();
     if (action === "resume-active-shift") store.openActiveShift();
     if (action === "back-to-schedule") store.goBackToSchedule();
+    if (action === "forgot-check-back") store.promptForgotCheckClose();
+    if (action === "forgot-check-cancel") store.promptForgotCheckClose();
+    if (action === "forgot-check-keep-editing") store.keepForgotCheckEditing();
+    if (action === "forgot-check-discard") store.discardForgotCheck();
+    if (action === "forgot-check-send") store.submitForgotCheckRequest();
     if (action === "select-tab") store.setTab(target.getAttribute("data-tab"));
     if (action === "check-in") store.checkIn(target.getAttribute("data-shift-id"));
     if (action === "check-out") store.checkOut(target.getAttribute("data-shift-id"));
@@ -262,6 +286,9 @@
     if (action === "filter-change") {
       store.updateFilterDraft(target.getAttribute("data-field"), target.value);
     }
+    if (action === "forgot-check-select") {
+      store.updateForgotCheckDraft(target.getAttribute("data-field"), target.value);
+    }
   }
 
   function handleInput(event) {
@@ -312,6 +339,9 @@
     }
     if (action === "disturbance-draft-input") {
       store.updateDisturbanceDraft(target.getAttribute("data-field"), target.value);
+    }
+    if (action === "forgot-check-input") {
+      store.updateForgotCheckDraft(target.getAttribute("data-field"), target.value);
     }
   }
 

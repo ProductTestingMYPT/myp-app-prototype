@@ -1,6 +1,7 @@
 (function () {
   const APP = (window.SupportShiftApp = window.SupportShiftApp || {});
   const data = APP.data;
+  const AMENDMENT_STORAGE_KEY = "support-shift-amendment-requests";
 
   function toDate(dateKey, time) {
     return new Date(dateKey + "T" + time + ":00");
@@ -84,6 +85,41 @@
       return acc;
     }, {});
     shift.notes.client = "";
+    shift.amendmentRequests = Array.isArray(shift.amendmentRequests) ? shift.amendmentRequests : [];
+  }
+
+  function loadStoredAmendmentRequests() {
+    try {
+      const raw = window.localStorage.getItem(AMENDMENT_STORAGE_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function saveStoredAmendmentRequests() {
+    try {
+      const payload = state.shifts.reduce(function (acc, shift) {
+        if (shift.amendmentRequests && shift.amendmentRequests.length) {
+          acc[shift.id] = shift.amendmentRequests;
+        }
+        return acc;
+      }, {});
+      window.localStorage.setItem(AMENDMENT_STORAGE_KEY, JSON.stringify(payload));
+    } catch (error) {
+      return;
+    }
+  }
+
+  function hydrateAmendmentRequests() {
+    const storedRequests = loadStoredAmendmentRequests();
+    state.shifts.forEach(function (shift) {
+      if (Array.isArray(storedRequests[shift.id])) {
+        shift.amendmentRequests = storedRequests[shift.id];
+      }
+    });
   }
 
   const state = {
@@ -97,6 +133,8 @@
     isMenuOpen: false,
     isNotificationsOpen: false,
     activeOverlay: null,
+    activeDialog: null,
+    toast: null,
     filters: {
       applied: {
         roster: "",
@@ -140,6 +178,7 @@
       initializeShiftExtensions(shift);
       recomputeShiftStatus(shift, today);
     });
+    hydrateAmendmentRequests();
   }
 
   function getSelectedShift() {
@@ -284,6 +323,23 @@
     notify();
   }
 
+  function getForgotCheckDraft() {
+    if (!state.activeOverlay || state.activeOverlay.type !== "forgot-check") return null;
+    return state.activeOverlay.draft;
+  }
+
+  function hasForgotCheckInput() {
+    const draft = getForgotCheckDraft();
+    if (!draft) return false;
+    return Boolean(draft.date || draft.shiftId || draft.checkInTime || draft.checkOutTime || draft.reason.trim());
+  }
+
+  function canSubmitForgotCheck() {
+    const draft = getForgotCheckDraft();
+    if (!draft) return false;
+    return Boolean(draft.date && draft.shiftId && draft.reason.trim());
+  }
+
   function updateFilterDraft(field, value) {
     if (!state.activeOverlay || state.activeOverlay.type !== "shift-filters") return;
     state.activeOverlay.draft[field] = value;
@@ -331,6 +387,22 @@
     state.selectedTab = "shift";
     state.isMenuOpen = false;
     state.activeOverlay = null;
+    notify();
+  }
+
+  function openForgotCheckOverlay() {
+    state.isMenuOpen = false;
+    state.activeDialog = null;
+    state.activeOverlay = {
+      type: "forgot-check",
+      draft: {
+        date: "",
+        shiftId: "",
+        checkInTime: "",
+        checkOutTime: "",
+        reason: "",
+      },
+    };
     notify();
   }
 
@@ -467,6 +539,87 @@
 
   function closeActiveOverlay() {
     state.activeOverlay = null;
+    notify();
+  }
+
+  function promptForgotCheckClose() {
+    if (!getForgotCheckDraft()) return;
+    if (!hasForgotCheckInput()) {
+      state.activeOverlay = null;
+      state.activeDialog = null;
+      notify();
+      return;
+    }
+    state.activeDialog = {
+      type: "confirm-forgot-check-discard",
+    };
+    notify();
+  }
+
+  function keepForgotCheckEditing() {
+    if (!state.activeDialog || state.activeDialog.type !== "confirm-forgot-check-discard") return;
+    state.activeDialog = null;
+    notify();
+  }
+
+  function discardForgotCheck() {
+    if (!state.activeOverlay || state.activeOverlay.type !== "forgot-check") return;
+    state.activeOverlay = null;
+    state.activeDialog = null;
+    notify();
+  }
+
+  function updateForgotCheckDraft(field, value) {
+    const draft = getForgotCheckDraft();
+    if (!draft) return;
+    draft[field] = value;
+    if (field === "date") {
+      const selectedShift = draft.shiftId ? getShiftById(draft.shiftId) : null;
+      if (!value || !selectedShift || selectedShift.date !== value) {
+        draft.shiftId = "";
+      }
+    }
+    notify();
+  }
+
+  function submitForgotCheckRequest() {
+    if (!canSubmitForgotCheck()) return;
+    const draft = getForgotCheckDraft();
+    const shift = getShiftById(draft.shiftId);
+    if (!shift) return;
+
+    state.notifications.unshift({
+      id: "n-forgot-check-" + Date.now(),
+      text:
+        "Adjustment request queued for " +
+        shift.rosterName +
+        " on " +
+        draft.date +
+        ". Manager notification simulated.",
+    });
+    shift.amendmentRequests.unshift({
+      id: "amend-" + Date.now(),
+      date: draft.date,
+      shiftId: draft.shiftId,
+      checkInTime: draft.checkInTime || "",
+      checkOutTime: draft.checkOutTime || "",
+      reason: draft.reason.trim(),
+      sentAt: new Date().toISOString(),
+    });
+    saveStoredAmendmentRequests();
+    state.activeOverlay = null;
+    state.activeDialog = null;
+    state.toast = {
+      id: "toast-" + Date.now(),
+      title: "Request sent",
+      message: "Your manager will be notified of this change",
+    };
+    notify();
+  }
+
+  function clearToast() {
+    if (!state.toast) return;
+    state.toast = null;
     notify();
   }
 
@@ -669,6 +822,7 @@
     shiftCalendarMonth,
     jumpToDate,
     openShift,
+    openForgotCheckOverlay,
     openActiveShift,
     goBackToSchedule,
     setTab,
@@ -683,6 +837,13 @@
     openAllowanceOverlay,
     openDisturbanceOverlay,
     closeActiveOverlay,
+    promptForgotCheckClose,
+    keepForgotCheckEditing,
+    discardForgotCheck,
+    updateForgotCheckDraft,
+    canSubmitForgotCheck,
+    submitForgotCheckRequest,
+    clearToast,
     updateClientAttendance,
     updateClientAbsenceReason,
     updateClientNoteText,

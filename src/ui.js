@@ -34,6 +34,27 @@
     }).format(new Date(isoString));
   }
 
+  function formatRequestSentAt(isoString) {
+    if (!isoString) return "Not recorded";
+    const sentAt = new Date(isoString);
+    const today = new Date();
+    if (dateKey(sentAt) === dateKey(today)) {
+      return (
+        "Today, " +
+        new Intl.DateTimeFormat("en-AU", {
+          hour: "numeric",
+          minute: "2-digit",
+        }).format(sentAt)
+      );
+    }
+    return new Intl.DateTimeFormat("en-AU", {
+      day: "numeric",
+      month: "short",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(sentAt);
+  }
+
   function formatMinutes(minutes) {
     if (minutes == null) return "Not recorded";
     const hours = Math.floor(minutes / 60);
@@ -105,6 +126,11 @@
 
   function getShiftCountForDate(dateKeyValue) {
     return getShiftsForDate(dateKeyValue).length;
+  }
+
+  function getForgotCheckShifts(dateKeyValue) {
+    if (!dateKeyValue) return [];
+    return getShiftsForDate(dateKeyValue);
   }
 
   function formatShiftTimeWindow(shift) {
@@ -198,7 +224,7 @@
       transport: "Transport",
       allowances: "Allowances",
       sleepover: "Sleepover",
-      summary: "Shift summary",
+      summary: "Check-out Summary",
     };
     return labels[store.state.selectedTab] || "Shift";
   }
@@ -270,6 +296,9 @@
       '<div class="field" style="margin-top:0.75rem"><span class="field-label">Participants</span><span>' +
       escapeHtml(participantNames) +
       "</span></div>" +
+      (shift.amendmentRequests && shift.amendmentRequests.length
+        ? '<div class="shift-card-footer"><span class="amendment-footer-dot" aria-hidden="true"></span><span>Amendment requested</span></div>'
+        : "") +
       "</button>"
     );
   }
@@ -457,6 +486,44 @@
           escapeHtml(formatShiftWorkedLabel(shift)) +
           "</div></div></div></section>"
         : "")
+    );
+  }
+
+  function renderAmendmentRequestItem(request) {
+    return (
+      '<div class="amendment-record">' +
+      '<div class="field"><span class="field-label">Request sent</span><span>' +
+      escapeHtml(formatRequestSentAt(request.sentAt)) +
+      "</span></div>" +
+      (request.checkInTime
+        ? '<div class="field"><span class="field-label">Check-in</span><span>' +
+          escapeHtml(formatTime(request.checkInTime)) +
+          "</span></div>"
+        : "") +
+      (request.checkOutTime
+        ? '<div class="field"><span class="field-label">Check-out</span><span>' +
+          escapeHtml(formatTime(request.checkOutTime)) +
+          "</span></div>"
+        : "") +
+      '<div class="field"><span class="field-label">Reason</span><span>' +
+      escapeHtml(request.reason || "No reason provided") +
+      "</span></div>" +
+      "</div>"
+    );
+  }
+
+  function renderAmendmentRequestsSection(shift) {
+    if (!shift.amendmentRequests || !shift.amendmentRequests.length) return "";
+    return (
+      '<section class="section-block section-block-tight"><h3 class="section-title">Amendment requests</h3><div class="list-stack">' +
+      shift.amendmentRequests
+        .slice()
+        .sort(function (a, b) {
+          return new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime();
+        })
+        .map(renderAmendmentRequestItem)
+        .join("") +
+      "</div></section>"
     );
   }
 
@@ -673,7 +740,7 @@
 
   function renderSummaryTab(shift) {
     return (
-      '<section class="section-block section-block-tight"><h3 class="section-title">Shift summary</h3><div class="metric-grid">' +
+      '<section class="section-block section-block-tight"><h3 class="section-title">Check-out Summary</h3><div class="metric-grid">' +
       '<div class="metric-item"><div class="field-label">Status</div><div>' +
       escapeHtml(data.STATUS_META[shift.status].label) +
       "</div></div>" +
@@ -699,7 +766,8 @@
       '<div class="metric-item"><div class="field-label">Documents</div><div>' +
       shift.documents.length +
       "</div></div>" +
-      "</div></section>"
+      "</div></section>" +
+      renderAmendmentRequestsSection(shift)
     );
   }
 
@@ -718,7 +786,7 @@
       tabs.push({ id: "sleepover", label: "Sleepover" });
     }
 
-    tabs.push({ id: "summary", label: "Shift summary" });
+    tabs.push({ id: "summary", label: "Check-out Summary" });
 
     const tabContent = {
       shift: renderShiftOverview(shift),
@@ -778,23 +846,17 @@
 
   function renderNotifications() {
     if (!store.state.isNotificationsOpen) return "";
-    const items = [
-      "Leave approved for next Tuesday.",
-      "New evening respite shift published for Saturday.",
-      "Shift details changed for tomorrow's clinic escort.",
-      "Manager update: bring the new medication folder to Unit 5.",
-    ];
     return (
       '<div class="flyout-overlay"><button class="slideout-backdrop" data-action="close-notifications" aria-label="Close notifications"></button><aside class="side-flyout side-flyout-right"><div class="flyout-header"><h2 class="overlay-title">Notifications</h2><button class="ghost-button icon-only-button" data-action="close-notifications" aria-label="Close notifications">' +
       renderIcon("x") +
       '</button></div><div class="notification-list">' +
-      items
+      store.state.notifications
         .map(function (item, index) {
           return (
             '<button class="notification-record" data-action="placeholder"><strong>Notification ' +
             (index + 1) +
             '</strong><div class="subtle">' +
-            escapeHtml(item) +
+            escapeHtml(item.text) +
             "</div></button>"
           );
         })
@@ -846,6 +908,7 @@
         .join("") +
       '<a class="menu-link" href="https://example.com/myp" target="_blank" rel="noreferrer">Back to MYP main site</a>' +
       '</div><div class="menu-group" style="margin-top:1rem"><p class="menu-section-title">Actions</p>' +
+      '<button class="menu-action standout-action" data-action="open-forgot-check"><span>I forgot to check in/out</span><span class="menu-action-hint">Quick request</span></button>' +
       '<button class="menu-action secondary-action" data-action="placeholder">Flexible shift check-in</button>' +
       '<button class="menu-action secondary-action" data-action="placeholder">Log Q time</button>' +
       '<button class="menu-action secondary-action" data-action="placeholder">Log off</button>' +
@@ -1152,6 +1215,74 @@
     );
   }
 
+  function renderForgotCheckOverlay(overlay) {
+    const draft = overlay.draft;
+    const shifts = getForgotCheckShifts(draft.date);
+    const canSend = store.canSubmitForgotCheck();
+
+    return (
+      '<section class="overlay-sheet overlay-sheet-full"><div class="overlay-sheet-header"><div class="overlay-header-row"><button class="ghost-button button-compact" data-action="forgot-check-back">Back</button><h2 class="overlay-title">I forgot to check in/out</h2></div></div>' +
+      '<div class="overlay-sheet-body"><section class="section-block section-block-tight"><p class="subtle">Fill in the details below to update your shift times and notify your manager.</p></section>' +
+      '<section class="section-block section-block-tight forgot-check-form">' +
+      '<div class="field"><label class="field-label" for="forgot-check-date">Date</label><input id="forgot-check-date" class="text-input" type="date" value="' +
+      escapeHtml(draft.date || "") +
+      '" data-action="forgot-check-input" data-field="date" /></div>' +
+      '<div class="field"><label class="field-label" for="forgot-check-shift">Shift</label><select id="forgot-check-shift" class="select-input" data-action="forgot-check-select" data-field="shiftId" ' +
+      (draft.date ? "" : "disabled") +
+      '><option value="">' +
+      (draft.date ? "Select a shift" : "Select a date first") +
+      "</option>" +
+      shifts
+        .map(function (shift) {
+          return (
+            '<option value="' +
+            shift.id +
+            '" ' +
+            (draft.shiftId === shift.id ? "selected" : "") +
+            ">" +
+            escapeHtml(shift.rosterName + " | " + formatShiftTimeWindow(shift)) +
+            "</option>"
+          );
+        })
+        .join("") +
+      '</select>' +
+      (draft.date && !shifts.length
+        ? '<p class="subtle">No rostered shifts found for this date.</p>'
+        : "") +
+      "</div>" +
+      '<div class="field"><label class="field-label" for="forgot-check-in-time">Check-in time</label><input id="forgot-check-in-time" class="text-input" type="time" value="' +
+      escapeHtml(draft.checkInTime || "") +
+      '" data-action="forgot-check-input" data-field="checkInTime" /></div>' +
+      '<div class="field"><label class="field-label" for="forgot-check-out-time">Check-out time</label><input id="forgot-check-out-time" class="text-input" type="time" value="' +
+      escapeHtml(draft.checkOutTime || "") +
+      '" data-action="forgot-check-input" data-field="checkOutTime" /></div>' +
+      '<div class="field"><label class="field-label" for="forgot-check-reason">Reason</label><textarea id="forgot-check-reason" class="textarea compact-textarea" data-action="forgot-check-input" data-field="reason" placeholder="Explain what happened">' +
+      escapeHtml(draft.reason || "") +
+      "</textarea></div>" +
+      '<div class="actions-row overlay-actions"><button class="ghost-button" data-action="forgot-check-cancel">Cancel</button><button class="solid-button" data-action="forgot-check-send" ' +
+      (canSend ? "" : "disabled") +
+      '>Send</button></div></section></div></section>'
+    );
+  }
+
+  function renderConfirmationDialog(dialog) {
+    if (dialog.type !== "confirm-forgot-check-discard") return "";
+    return (
+      '<div class="dialog-scrim"><section class="dialog-card"><h2 class="overlay-title">Discard details?</h2><p class="subtle">You’ll lose the details you’ve entered. Continue?</p><div class="actions-row overlay-actions"><button class="ghost-button" data-action="forgot-check-keep-editing">No</button><button class="solid-button" data-action="forgot-check-discard">Yes</button></div></section></div>'
+    );
+  }
+
+  function renderToast() {
+    if (!store.state.toast) return "";
+    return (
+      '<div class="toast" role="status" aria-live="polite"><strong>' +
+      escapeHtml(store.state.toast.title) +
+      '</strong><p>' +
+      escapeHtml(store.state.toast.message) +
+      "</p></div>"
+    );
+  }
+
   function renderActiveOverlay() {
     const overlay = store.state.activeOverlay;
     if (!overlay) return "";
@@ -1161,6 +1292,7 @@
     if (overlay.type === "general-notes") return renderGeneralNotesOverlay(overlay);
     if (overlay.type === "allowance") return renderAllowanceOverlay(overlay);
     if (overlay.type === "sleep-disturbance") return renderDisturbanceOverlay(overlay);
+    if (overlay.type === "forgot-check") return renderForgotCheckOverlay(overlay);
     return "";
   }
 
@@ -1231,6 +1363,8 @@
         renderCurrentPage() +
         "</main>" +
         renderActiveOverlay() +
+        (store.state.activeDialog ? renderConfirmationDialog(store.state.activeDialog) : "") +
+        renderToast() +
         renderNotifications() +
         renderBurgerMenu() +
         "</div>"

@@ -148,6 +148,7 @@
       documents: seed.documents || [],
       allowances: seed.allowances || [],
       transportLogs: seed.transportLogs || [],
+      amendmentRequests: seed.amendmentRequests || [],
       sleepover:
         seed.shiftType === "sleepover"
           ? {
